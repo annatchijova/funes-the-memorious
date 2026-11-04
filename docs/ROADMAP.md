@@ -19,7 +19,7 @@ Live status summary:
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | PARTIAL (host slice DONE, VERIFIED_HOST_ONLY; QEMU/QNX runtime NOT_RUN, blocked by Level 2) |
 | 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
-| 6 | Security, Performance, Portability and Release | NOT_STARTED |
+| 6 | Security, Performance, Portability and Release | PARTIAL (parser fuzzing harness + seed corpus + CI smoke job DONE; resource-budget doc, broader CI, release packaging NOT_STARTED) |
 | 7 | Hackathon Jury Experience | NOT_STARTED |
 
 Status vocabulary: `DONE`, `PARTIAL`, `BLOCKED`, `NOT_STARTED`, plus the
@@ -435,7 +435,24 @@ limitation matrix; no known parser crash remains untriaged.
 **Observable demo.** Fresh-clone build, test, and release verification from
 the documented commands alone.
 
-**Status: NOT_STARTED.**
+**Status: PARTIAL.** Done: a libFuzzer harness for the two places this
+codebase parses untrusted bytes from scratch (the manifest tokenizer and
+the Level 4 JSON test-report parser), each with a seed corpus built from
+real captured bytes plus targeted adversarial variants, and a bounded
+30-second-per-target crash-smoke job wired into CI as a separate `fuzz-
+smoke` job (`docs/security/FUZZING.md` states plainly what a 30-second
+bounded run does and does not prove — it is not a continuous fuzzing
+campaign). The manifest tokenizer was extracted into a pure, non-exiting
+function to make this possible, verified behavior-preserving by diffing
+`tests/run_tests.sh`'s full output byte-for-byte against the pre-refactor
+commit (identical). Still open: resource-budget consolidation into one
+document (the individual `RESOURCE_LIMIT_EXCEEDED` checks already exist
+across Levels 1/4/6 but are not yet enumerated in one place), determinism/
+schema-compatibility regression tests specifically for the v1→v2 boundary
+beyond what Level 4's own tests already cover, broader CI (lint, license
+and secret scanning, README-as-written smoke test), and the packaged
+release with checksums and a limitation matrix. None of the open items are
+started; none are claimed done.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 

@@ -77,6 +77,21 @@ static const char *get_val(const char *key) {
 
 static bool has_key(const char *key) { return get_val(key) != NULL; }
 
+/* Frees every entry and resets the global key-value store. The CLI binary
+ * never needs this (the process exits after one bundle), but a libFuzzer
+ * harness runs thousands of inputs per process and must not let entries
+ * accumulate across iterations (Level 6 fuzzing harness). */
+static void reset_manifest_store(void) {
+    for (size_t i = 0; i < g_count; i++) {
+        free(g_entries[i].key);
+        free(g_entries[i].val);
+    }
+    free(g_entries);
+    g_entries = NULL;
+    g_count = 0;
+    g_cap = 0;
+}
+
 static bool is_hex64(const char *s) {
     if (!s || strlen(s) != 64) return false;
     for (int i = 0; i < 64; i++) {
@@ -301,6 +316,87 @@ static bool key_allowed(const char *k) {
     return false;
 }
 
+/* Pure manifest tokenizer: line-splitting, line-length/line-count limits,
+ * header capture, duplicate/unknown-key rejection, populating the global
+ * key-value store. Returns false and sets out_code / out_exit / err instead
+ * of exiting, so it can be driven directly by a libFuzzer harness (Level 6)
+ * without killing the fuzzer process after one malformed input -- every
+ * other FAIL call site in this file stays exiting, this is the one
+ * untrusted-bytes-in boundary carved out on purpose. Caller still owns
+ * freeing buf. */
+static bool parse_manifest_buffer(const uint8_t *buf, size_t len,
+                                   const char **out_code, int *out_exit,
+                                   char *err, size_t errsz) {
+    if (len == 0 || buf[len - 1] != '\n') {
+        *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+        snprintf(err, errsz, "manifest must end with LF");
+        return false;
+    }
+    size_t pos = 0;
+    int lineno = 0;
+    char header[64] = "";
+    while (pos < len) {
+        size_t start = pos;
+        while (pos < len && buf[pos] != '\n') pos++;
+        size_t linelen = pos - start;
+        if (linelen >= MAX_LINE) {
+            *out_code = "RESOURCE_LIMIT_EXCEEDED"; *out_exit = 6;
+            snprintf(err, errsz, "manifest line too long");
+            return false;
+        }
+        if (lineno >= MAX_LINES) {
+            *out_code = "RESOURCE_LIMIT_EXCEEDED"; *out_exit = 6;
+            snprintf(err, errsz, "too many manifest lines");
+            return false;
+        }
+        char *line = xmalloc(linelen + 1);
+        memcpy(line, buf + start, linelen);
+        line[linelen] = '\0';
+        for (size_t c = 0; c < linelen; c++) {
+            if (buf[start + c] == '\r' || buf[start + c] == '\0') {
+                free(line);
+                *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+                snprintf(err, errsz, "manifest contains CR or NUL");
+                return false;
+            }
+        }
+        if (lineno == 0) {
+            snprintf(header, sizeof(header), "%s", line);
+        } else {
+            char *eq = strchr(line, '=');
+            if (!eq || eq == line) {
+                free(line);
+                *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+                snprintf(err, errsz, "manifest line %d is not key=value", lineno + 1);
+                return false;
+            }
+            *eq = '\0';
+            if (has_key(line)) {
+                *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+                snprintf(err, errsz, "duplicate key %s", line);
+                free(line);
+                return false;
+            }
+            if (!key_allowed(line)) {
+                *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+                snprintf(err, errsz, "unknown key %s", line);
+                free(line);
+                return false;
+            }
+            add_entry(line, eq + 1);
+        }
+        free(line);
+        lineno++;
+        pos++;
+    }
+    if (strcmp(header, "FUNES-BUNDLE-1") != 0) {
+        *out_code = "BUNDLE_INVALID"; *out_exit = 2;
+        snprintf(err, errsz, "bad manifest header");
+        return false;
+    }
+    return true;
+}
+
 static void require_key(const char *k) {
     if (!has_key(k)) FAIL("BUNDLE_INVALID", 2, "missing required key %s", k);
 }
@@ -326,7 +422,13 @@ static void sig_fail(const char *code, int ex, const char *testobs, const char *
     report_and_exit("INTEGRITY_VALID", "ALL_PRESENT", testobs, qnxf);
 }
 
+/* Guarded so a libFuzzer harness can #include this file and supply its own
+ * main (LLVMFuzzerTestOneInput) without a symbol clash (Level 6). */
+#ifndef FUNES_VERIFY_FUZZ_BUILD
 int main(int argc, char **argv) {
+    reset_manifest_store(); /* no-op here (process just started); keeps the
+                              * function genuinely used in both build modes
+                              * and exercised by the CLI's own test suite. */
     const char *bundle = NULL;
     const char *trusted_path = NULL;
     for (int i = 1; i < argc; i++) {
@@ -374,40 +476,14 @@ int main(int argc, char **argv) {
         FAIL("SEAL_MISMATCH", 7, "SEAL.txt does not commit to manifest.txt bytes");
     }
     free(sbuf);
-    /* Split lines strictly. */
-    if (mlen == 0 || mbuf[mlen - 1] != '\n') FAIL("BUNDLE_INVALID", 2, "manifest must end with LF");
-    size_t pos = 0;
-    int lineno = 0;
-    char header[64] = "";
-    while (pos < mlen) {
-        size_t start = pos;
-        while (pos < mlen && mbuf[pos] != '\n') pos++;
-        size_t linelen = pos - start;
-        if (linelen >= MAX_LINE) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "manifest line too long");
-        if (lineno >= MAX_LINES) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "too many manifest lines");
-        char *line = xmalloc(linelen + 1);
-        memcpy(line, mbuf + start, linelen);
-        line[linelen] = '\0';
-        for (size_t c = 0; c < linelen; c++) {
-            if (mbuf[start + c] == '\r' || mbuf[start + c] == '\0')
-                FAIL("BUNDLE_INVALID", 2, "manifest contains CR or NUL");
-        }
-        if (lineno == 0) {
-            snprintf(header, sizeof(header), "%s", line);
-        } else {
-            char *eq = strchr(line, '=');
-            if (!eq || eq == line) FAIL("BUNDLE_INVALID", 2, "manifest line %d is not key=value", lineno + 1);
-            *eq = '\0';
-            if (has_key(line)) FAIL("BUNDLE_INVALID", 2, "duplicate key %s", line);
-            if (!key_allowed(line)) FAIL("BUNDLE_INVALID", 2, "unknown key %s", line);
-            add_entry(line, eq + 1);
-        }
-        free(line);
-        lineno++;
-        pos++;
+    /* Tokenize: pure function so a libFuzzer harness can drive it directly
+     * without the process exiting on malformed input (Level 6). */
+    {
+        const char *pcode; int pexit; char perr[256];
+        bool pok = parse_manifest_buffer(mbuf, mlen, &pcode, &pexit, perr, sizeof(perr));
+        free(mbuf);
+        if (!pok) FAIL(pcode, pexit, "%s", perr);
     }
-    free(mbuf);
-    if (strcmp(header, "FUNES-BUNDLE-1") != 0) FAIL("BUNDLE_INVALID", 2, "bad manifest header");
     const char *sv = get_val("schema_version");
     if (!sv) FAIL("BUNDLE_INVALID", 2, "missing schema_version");
     if (strcmp(sv, "2") != 0) FAIL("UNSUPPORTED_SCHEMA", 5, "unsupported schema_version %s", sv);
@@ -788,4 +864,5 @@ int main(int argc, char **argv) {
     report_and_exit("INTEGRITY_VALID", "ALL_PRESENT", testobs, qnxf);
     return 0;
 }
+#endif /* FUNES_VERIFY_FUZZ_BUILD */
 

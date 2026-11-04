@@ -18,3 +18,18 @@ jobs:
           test -f README.md
           test -f docs/ROADMAP.md
           test -f docs/spec/EVIDENCE-BUNDLE-v1.md
+
+  # Separate job: does not block or replace the `host` job above. This is a
+  # bounded crash smoke-test (30s per target against a small seed corpus),
+  # not a continuous fuzzing campaign -- see docs/security/FUZZING.md for
+  # exactly what this does and does not prove.
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build fuzz targets (clang + libFuzzer)
+        run: sh fuzz/build.sh
+      - name: Manifest tokenizer -- 30s smoke run against seed corpus
+        run: ./fuzz/bin/fuzz_manifest -max_total_time=30 fuzz/corpus/manifest
+      - name: JSON report parser -- 30s smoke run against seed corpus
+        run: ./fuzz/bin/fuzz_json_report -max_total_time=30 fuzz/corpus/json
