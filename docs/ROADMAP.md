@@ -17,7 +17,7 @@ Live status summary:
 | 1 | Real Host Capture and Independent Verification | DONE (VERIFIED_HOST_ONLY) |
 | 2 | Genuine QNX SDP 8.0 Build Integration | BLOCKED |
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
-| 4 | Test Evidence and QNX Runtime | NOT_STARTED |
+| 4 | Test Evidence and QNX Runtime | PARTIAL (host slice DONE, VERIFIED_HOST_ONLY; QEMU/QNX runtime NOT_RUN, blocked by Level 2) |
 | 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
 | 6 | Security, Performance, Portability and Release | NOT_STARTED |
 | 7 | Hackathon Jury Experience | NOT_STARTED |
@@ -324,7 +324,30 @@ broader safety certification. Host-only parts exit as `VERIFIED_HOST_ONLY`.
 **Observable demo.** Test run against the Level 2 fixture binary, including
 one deliberately failing test whose evidence is preserved and verified.
 
-**Status: NOT_STARTED.**
+**Status: PARTIAL.** Host-only slice is `DONE (VERIFIED_HOST_ONLY)`;
+target/QEMU parts remain `NOT_RUN`, blocked by Level 2 (no QNX SDP). Evidence
+for the host slice: `make test` reports `pass=97 fail=0` (see
+`docs/STATUS.md`), covering: every test record now carries a required
+`test.<n>.runtime` token (`host`, always, in this round — there is no real
+QNX execution path yet, and a flag letting a caller claim `target` without
+genuine QNX execution would be overclaiming per the threat model), enforced
+by the verifier as `BUNDLE_INVALID` on an invalid or missing token; an
+optional `--name` on `add-test`/`import-test`; `funes expect-tests` to
+declare, exactly once per bundle, the test names its evidence must contain,
+with the verifier reporting `MISSING_EXPECTED_TEST` (exit 10) on an
+unsatisfied declaration and the collector itself refusing re-declaration or
+a duplicate name in one call; and a structured JSON test-report adapter
+(`import-test --format json`, `docs/architecture/ADR-003-TEST-REPORT-FORMAT.md`)
+with a hand-rolled, depth/length/count-capped, duplicate-key-rejecting
+parser (`src/json_min.c`, compiled into the collector only, never the
+verifier), adversarially tested against a 1200-deep nesting bomb, a
+duplicate top-level key, trailing garbage after the document, and an
+oversized (>1 MiB) report — all rejected cleanly before or during parsing,
+none causing a crash. These additions bumped the manifest format to
+`schema_version=2` (`docs/spec/EVIDENCE-BUNDLE-v2.md`); a v1 bundle (schema
+`1`) is now cleanly `UNSUPPORTED_SCHEMA`, by design, with no silent
+migration. Structured JUnit/TAP adapters and the QEMU/QNX runtime scenario
+remain future work (ADR-003; Level 2 dependency).
 
 **Non-goals.** Coverage or safety guarantees from test counts; arbitrary
 test-framework semantics.

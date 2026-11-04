@@ -115,7 +115,7 @@ expect_exit 2 $? "symlink blob rejected"
 
 echo "== unsupported schema (correctly resealed) =="
 cp -r "$TMP/b1" "$TMP/b1_schema"
-sed -i 's/schema_version=1/schema_version=99/' "$TMP/b1_schema/manifest.txt"
+sed -i 's/schema_version=2/schema_version=99/' "$TMP/b1_schema/manifest.txt"
 NEWSEAL=$(sha256sum "$TMP/b1_schema/manifest.txt" | cut -d' ' -f1)
 printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_schema/SEAL.txt"
 $VERIFY "$TMP/b1_schema" >"$TMP/vt7.txt" 2>&1
@@ -302,6 +302,90 @@ rm -rf "$TMP/brt2c/signatures" 2>/dev/null
 printf 'not a directory' >"$TMP/brt2c/signatures"
 $VERIFY "$TMP/brt2c" >"$TMP/vrt2c.txt" 2>&1
 expect_exit 2 $? "RT-02 follow-up: non-directory signatures rejected"
+
+echo "== level 4: test evidence =="
+mkdir -p "$TMP/l4work"
+printf 'int main(void){return 0;}\n' >"$TMP/l4work/l4.c"
+$FUNES capture --out "$TMP/l4a" --artifact "$TMP/l4work/l4.c:target-executable" -- /bin/true >"$TMP/l4cap.log" 2>&1
+L4ART=$(grep "^artifact.0.sha256=" "$TMP/l4a/manifest.txt" | cut -d= -f2)
+$FUNES add-test --bundle "$TMP/l4a" --artifact-sha256 "$L4ART" --name l4-observed -- /bin/true >"$TMP/l4t1.log" 2>&1
+grep -q "test.0.runtime=host" "$TMP/l4a/manifest.txt"; ok $? "add-test records runtime=host"
+printf 'external report\n' >"$TMP/l4report.txt"
+$FUNES import-test --bundle "$TMP/l4a" --artifact-sha256 "$L4ART" --report "$TMP/l4report.txt" --name l4-imported >"$TMP/l4t2.log" 2>&1
+grep -q "test.1.runtime=host" "$TMP/l4a/manifest.txt"; ok $? "import-test records runtime=host"
+$VERIFY "$TMP/l4a" >"$TMP/l4v1.txt" 2>&1
+expect_exit 0 $? "bundle with named host tests verifies"
+
+cp -r "$TMP/l4a" "$TMP/l4_rt_bad"
+sed -i 's/test\.0\.runtime=host/test.0.runtime=qnx/' "$TMP/l4_rt_bad/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/l4_rt_bad/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/l4_rt_bad/SEAL.txt"
+$VERIFY "$TMP/l4_rt_bad" >"$TMP/l4v2.txt" 2>&1
+expect_exit 2 $? "test.N.runtime with invalid token rejected"
+
+cp -r "$TMP/l4a" "$TMP/l4_rt_missing"
+sed -i '/^test\.0\.runtime=/d' "$TMP/l4_rt_missing/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/l4_rt_missing/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/l4_rt_missing/SEAL.txt"
+$VERIFY "$TMP/l4_rt_missing" >"$TMP/l4v3.txt" 2>&1
+expect_exit 2 $? "test.N.runtime missing key rejected"
+
+$FUNES expect-tests --bundle "$TMP/l4a" -- l4-observed l4-imported >"$TMP/l4exp1.log" 2>&1
+expect_exit 0 $? "expect-tests declares satisfied expectations"
+$VERIFY "$TMP/l4a" >"$TMP/l4v4.txt" 2>&1
+expect_exit 0 $? "bundle with satisfied expectations verifies"
+$FUNES expect-tests --bundle "$TMP/l4a" -- another-name >"$TMP/l4exp2.log" 2>&1
+if [ $? -ne 0 ]; then PASS=$((PASS + 1)); echo "PASS: expect-tests refuses to re-declare on the same bundle";
+else FAIL=$((FAIL + 1)); echo "FAIL: expect-tests refuses to re-declare on the same bundle"; fi
+$FUNES expect-tests --bundle "$TMP/l4_dupnames" -- same same >"$TMP/l4exp3.log" 2>&1
+if [ $? -ne 0 ]; then PASS=$((PASS + 1)); echo "PASS: expect-tests refuses a duplicate name in one call";
+else FAIL=$((FAIL + 1)); echo "FAIL: expect-tests refuses a duplicate name in one call"; fi
+
+$FUNES capture --out "$TMP/l4b" --artifact "$TMP/l4work/l4.c:target-executable" -- /bin/true >"$TMP/l4capb.log" 2>&1
+L4ARTB=$(grep "^artifact.0.sha256=" "$TMP/l4b/manifest.txt" | cut -d= -f2)
+$FUNES add-test --bundle "$TMP/l4b" --artifact-sha256 "$L4ARTB" --name present -- /bin/true >"$TMP/l4t3.log" 2>&1
+$FUNES expect-tests --bundle "$TMP/l4b" -- present absent-one >"$TMP/l4exp4.log" 2>&1
+$VERIFY "$TMP/l4b" >"$TMP/l4v5.txt" 2>&1
+expect_exit 10 $? "expect-tests omission detected (MISSING_EXPECTED_TEST)"
+grep -q "MISSING_EXPECTED_TEST" "$TMP/l4v5.txt"; ok $? "omission named MISSING_EXPECTED_TEST"
+
+mkjsoncase() {
+    # mkjsoncase LABEL REPORT_FILE EXPECT_EXIT
+    $FUNES capture --out "$TMP/l4j_$1" --artifact "$TMP/l4work/l4.c:target-executable" -- /bin/true >"$TMP/l4jcap_$1.log" 2>&1
+    A=$(grep "^artifact.0.sha256=" "$TMP/l4j_$1/manifest.txt" | cut -d= -f2)
+    $FUNES import-test --bundle "$TMP/l4j_$1" --artifact-sha256 "$A" --report "$2" --format json >"$TMP/l4jlog_$1.log" 2>&1
+    expect_exit "$3" $? "import-test --format json: $1"
+}
+
+printf '{"passed":true,"cases":[{"name":"a","passed":true},{"name":"b","passed":true}]}' >"$TMP/l4j_good.json"
+mkjsoncase good "$TMP/l4j_good.json" 0
+grep -q "test.0.report_passed=1" "$TMP/l4j_good/manifest.txt"; ok $? "json report_passed=1 recorded"
+grep -q "test.0.report_case_count=2" "$TMP/l4j_good/manifest.txt"; ok $? "json report_case_count=2 recorded"
+$VERIFY "$TMP/l4j_good" >"$TMP/l4jv_good.txt" 2>&1
+expect_exit 0 $? "bundle with JSON test report verifies"
+
+printf '{"name":"from-report","passed":false}' >"$TMP/l4j_name.json"
+$FUNES capture --out "$TMP/l4j_name" --artifact "$TMP/l4work/l4.c:target-executable" -- /bin/true >"$TMP/l4jcap_name.log" 2>&1
+AN=$(grep "^artifact.0.sha256=" "$TMP/l4j_name/manifest.txt" | cut -d= -f2)
+$FUNES import-test --bundle "$TMP/l4j_name" --artifact-sha256 "$AN" --report "$TMP/l4j_name.json" --format json >"$TMP/l4jlog_name.log" 2>&1
+grep -q "test.0.name.hex=$(printf 'from-report' | od -An -tx1 | tr -d ' \n')" "$TMP/l4j_name/manifest.txt"
+ok $? "JSON-supplied name recorded when --name omitted"
+
+awk 'BEGIN{s="{\"passed\":";for(i=0;i<1200;i++)s=s"[";for(i=0;i<1200;i++)s=s"]";s=s"}";print s}' >"$TMP/l4j_bomb.json"
+mkjsoncase bomb "$TMP/l4j_bomb.json" 1
+
+printf '{"passed":true,"passed":false}' >"$TMP/l4j_dup.json"
+mkjsoncase dup "$TMP/l4j_dup.json" 1
+
+printf '{"passed":true}trailing-garbage' >"$TMP/l4j_trail.json"
+mkjsoncase trail "$TMP/l4j_trail.json" 1
+
+python3 -c "
+print('{\"passed\":true,\"cases\":[' + ','.join('{\"name\":\"x\",\"passed\":true}' for _ in range(40000)) + ']}')
+" >"$TMP/l4j_huge.json" 2>/dev/null || \
+awk 'BEGIN{s="{\"passed\":true,\"cases\":[";for(i=0;i<40000;i++){if(i)s=s",";s=s"{\"name\":\"x\",\"passed\":true}"};s=s"]}";print s}' >"$TMP/l4j_huge.json"
+[ "$(wc -c <"$TMP/l4j_huge.json")" -gt 1048576 ]; ok $? "oversized report fixture exceeds 1 MiB cap"
+mkjsoncase huge "$TMP/l4j_huge.json" 1
 
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"

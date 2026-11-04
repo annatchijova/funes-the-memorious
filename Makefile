@@ -8,9 +8,9 @@ BIN = bin/funes bin/funes-verify
 
 all: $(BIN)
 
-bin/funes: src/funes.c src/sha256.c src/sha256.h
+bin/funes: src/funes.c src/sha256.c src/sha256.h src/json_min.c src/json_min.h
 	mkdir -p bin
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ src/funes.c src/sha256.c -ldl
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ src/funes.c src/sha256.c src/json_min.c -ldl
 
 # The verifier must not link collector objects: it has its own SHA-256 and
 # its own parser (see docs/spec/VERIFIER-SEMANTICS.md and ADR-001). It loads

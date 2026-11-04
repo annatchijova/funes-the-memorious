@@ -255,17 +255,24 @@ static bool key_allowed(const char *k) {
         "build.stderr_size", "build.stderr_truncated", "source.git_head",
         "source.git_dirty", "source.file_count", "source.digest",
         "artifact_count", "test_count", "env.host_os.hex", "env.host_arch.hex",
-        "qnx.host_present", "qnx.target_present", NULL};
+        "qnx.host_present", "qnx.target_present",
+        /* Level 4: expected-test declarations (expect-tests). */
+        "expected_test_count", NULL};
     for (int i = 0; exact[i]; i++) if (strcmp(k, exact[i]) == 0) return true;
     if (starts(k, "blob.") && is_hex64(k + 5) && strlen(k) == 5 + 64) return true;
     static const char *argv_tails[] = {"hex"};
     if (indexed_ok(k, "build.argv.", argv_tails, 1)) return true;
+    static const char *expected_test_tails[] = {"name.hex"};
+    if (indexed_ok(k, "expected_test.", expected_test_tails, 1)) return true;
     if (starts(k, "test.") ) {
         static const char *tt[] = {"origin", "artifact_sha256", "report_sha256",
             "report_size", "argv_count", "started_unix", "elapsed_ms",
             "exit_status", "signaled", "signal", "stdout_sha256", "stdout_size",
-            "stdout_truncated", "stderr_sha256", "stderr_size", "stderr_truncated"};
-        if (indexed_ok(k, "test.", tt, 16)) return true;
+            "stdout_truncated", "stderr_sha256", "stderr_size", "stderr_truncated",
+            /* Level 4: host-vs-target enforcement, optional name, optional
+             * structured (JSON) report adapter fields. */
+            "runtime", "name.hex", "report_format", "report_passed", "report_case_count"};
+        if (indexed_ok(k, "test.", tt, 21)) return true;
         /* test.<n>.argv.<m>.hex */
         const char *p = k + 5;
         if (*p >= '0' && *p <= '9') {
@@ -396,7 +403,7 @@ int main(int argc, char **argv) {
     if (strcmp(header, "FUNES-BUNDLE-1") != 0) FAIL("BUNDLE_INVALID", 2, "bad manifest header");
     const char *sv = get_val("schema_version");
     if (!sv) FAIL("BUNDLE_INVALID", 2, "missing schema_version");
-    if (strcmp(sv, "1") != 0) FAIL("UNSUPPORTED_SCHEMA", 5, "unsupported schema_version %s", sv);
+    if (strcmp(sv, "2") != 0) FAIL("UNSUPPORTED_SCHEMA", 5, "unsupported schema_version %s", sv);
     static const char *req[] = {
         "build.origin", "build.argv_count", "build.cwd.hex", "build.started_unix",
         "build.elapsed_ms", "build.exit_status", "build.signaled", "build.signal",
@@ -566,8 +573,16 @@ int main(int argc, char **argv) {
             FAIL("BUNDLE_INVALID", 2, "signatures must be a regular directory, not a symlink or other object");
         }
     }
-    /* Test records: origins reported, never promoted; association checked. */
+    /* Test records: origins reported, never promoted; association checked.
+     * Level 4 additions (schema v2): every test record must carry a
+     * runtime=host|target token (host-vs-target distinction, never
+     * inferred or defaulted), and we collect each test's optional
+     * name.hex so the expected-test omission check below can cross-
+     * reference against them. */
     bool any_test = false, any_observed = false;
+    char (*test_names)[MAX_LINE] = NULL;
+    unsigned long long ntest_names = 0;
+    if (ntest > 0) test_names = xmalloc(ntest * sizeof(*test_names));
     for (unsigned long long i = 0; i < ntest; i++) {
         char k[128];
         snprintf(k, sizeof(k), "test.%llu.origin", i);
@@ -580,6 +595,11 @@ int main(int argc, char **argv) {
         bool linked = false;
         for (unsigned long long a = 0; a < nart; a++) if (strcmp(art_digests[a], ad) == 0) linked = true;
         if (!linked) FAIL("BUNDLE_INVALID", 2, "test %llu references unknown artifact digest", i);
+        snprintf(k, sizeof(k), "test.%llu.runtime", i);
+        require_key(k);
+        const char *rt = get_val(k);
+        if (strcmp(rt, "host") != 0 && strcmp(rt, "target") != 0)
+            FAIL("BUNDLE_INVALID", 2, "test %llu has unknown runtime %s (must be host or target)", i, rt);
         if (strcmp(org, "OBSERVED") == 0) {
             any_observed = true;
             snprintf(k, sizeof(k), "test.%llu.stdout_sha256", i);
@@ -592,8 +612,44 @@ int main(int argc, char **argv) {
         } else {
             FAIL("BUNDLE_INVALID", 2, "test %llu has unknown origin %s", i, org);
         }
+        snprintf(k, sizeof(k), "test.%llu.report_format", i);
+        if (has_key(k) && strcmp(get_val(k), "JSON") != 0)
+            FAIL("BUNDLE_INVALID", 2, "test %llu has unknown report_format %s", i, get_val(k));
+        snprintf(k, sizeof(k), "test.%llu.name.hex", i);
+        if (has_key(k)) {
+            snprintf(test_names[ntest_names], sizeof(test_names[ntest_names]), "%s", get_val(k));
+            ntest_names++;
+        }
     }
     const char *testobs = !any_test ? "NO_TEST_RECORD" : (any_observed ? "OBSERVED" : "IMPORTED_ONLY");
+    /* Level 4: expected-test omission detection. A bundle may declare,
+     * exactly once (funes expect-tests), the hex-encoded names it expects
+     * to see among the test records above. Absence of expected_test_count
+     * means no expectations were declared, which is a legitimate state,
+     * not a finding. If declared, every one of them must match a
+     * collected test name, or the bundle is missing evidence it claims to
+     * need -- a hard failure, not a degraded status (fail-closed, same
+     * philosophy as every other completeness check in this verifier). */
+    if (has_key("expected_test_count")) {
+        unsigned long long nexp = req_u64("expected_test_count");
+        if (nexp > 1024) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "expected_test_count too large");
+        for (unsigned long long i = 0; i < nexp; i++) {
+            char k[128];
+            snprintf(k, sizeof(k), "expected_test.%llu.name.hex", i);
+            require_key(k);
+            const char *want = get_val(k);
+            bool found = false;
+            for (unsigned long long t = 0; t < ntest_names; t++) {
+                if (strcmp(test_names[t], want) == 0) { found = true; break; }
+            }
+            if (!found) {
+                g_code = "MISSING_EXPECTED_TEST"; g_exit = 10;
+                snprintf(g_detail, sizeof(g_detail), "expected test %llu (name.hex=%s) was never observed or imported", i, want);
+                report_and_exit("INTEGRITY_INVALID", "NOT_CHECKED", testobs, "NOT_CHECKED");
+            }
+        }
+    }
+    free(test_names);
     int qh = strcmp(get_val("qnx.host_present"), "1") == 0;
     int qt2 = strcmp(get_val("qnx.target_present"), "1") == 0;
     const char *qnxf = (qh && qt2) ? "RECORDED_PRESENT_FLAGS" : "RECORDED_ABSENT_FLAGS";

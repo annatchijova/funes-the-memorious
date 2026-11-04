@@ -1,6 +1,10 @@
 # Evidence Bundle Format v1
 
 Status: implemented by Level 1 (`src/funes.c`, `verifier/funes_verify.c`).
+Superseded by v2 (`EVIDENCE-BUNDLE-v2.md`) for bundles produced by the
+current collector/verifier (Level 4, `schema_version=2`); this document
+remains the accurate historical record of what v1 was and is otherwise
+unchanged below.
 Language: English. An implementer needs only this document, SHA-256, and a
 text parser to write an independent checker. No Funes code is required.
 

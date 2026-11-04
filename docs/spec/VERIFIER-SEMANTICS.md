@@ -1,6 +1,6 @@
 # Verifier Semantics
 
-Status: implemented by Level 1 and Level 3 (`verifier/funes_verify.c`). Language: English.
+Status: implemented by Level 1, Level 3, and Level 4 (`verifier/funes_verify.c`). Language: English.
 
 ## Independence contract
 
@@ -44,6 +44,7 @@ verified execution.
 | 7 | `SEAL_MISMATCH` | `SEAL.txt` does not commit to the manifest bytes |
 | 8 | `SIGNATURE_INVALID` | Signature material incomplete/malformed, commits to a different manifest, or fails Ed25519 verification (integrity may still be valid and is reported as such) |
 | 9 | `SIGNER_UNTRUSTED` | Signature is valid under the bundle's signer key, but that key does not match the supplied `--trusted-key` |
+| 10 | `MISSING_EXPECTED_TEST` | A test name declared in `expected_test.<n>` (Level 4, v2) was never observed or imported; names the missing expected test |
 
 Exit 1 is reserved for verifier usage/internal errors (unreadable bundle
 directory, out of memory) and is never used for evidence findings, so scripts
@@ -55,7 +56,7 @@ stable strings suitable for test assertions.
 
 1. Bundle directory readable; `manifest.txt` present and within limits;
    `SEAL.txt` present, well-formed, and matching (`SEAL_MISMATCH`).
-2. Header and `schema_version` (`UNSUPPORTED_SCHEMA` before deeper parsing).
+2. Header and `schema_version` (`UNSUPPORTED_SCHEMA` before deeper parsing; `2` as of Level 4, see `EVIDENCE-BUNDLE-v2.md`).
 3. Strict line grammar, key sorting is not required of foreign bundles but
    duplicate/unknown/malformed keys are `BUNDLE_INVALID`; required keys
    present with in-range values; indexed keys contiguous.
@@ -73,6 +74,11 @@ stable strings suitable for test assertions.
    such, not as a pass).
 7. Origin discipline: `build.origin` must be `OBSERVED`; test origins are
    reported, never promoted.
+8. Host-vs-target and expected-test completeness (Level 4): every test
+   record's `runtime` must be exactly `host` or `target`, else
+   `BUNDLE_INVALID`; if `expected_test_count` is present, every declared
+   expected name must match some test's `name.hex`, else
+   `MISSING_EXPECTED_TEST`.
 
 ## What success does not mean
 

@@ -19,7 +19,7 @@ make test                 # sh tests/run_tests.sh
 ./bin/funes doctor --json
 ```
 
-Observed test outcome: **74 PASS, 0 FAIL** (`RESULT: pass=74 fail=0`, suite
+Observed test outcome: **97 PASS, 0 FAIL** (`RESULT: pass=97 fail=0`, suite
 exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Validation matrix
@@ -48,18 +48,24 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
 | Security tests | Passed/failed counts | Hostile cases above are part of the 74-check suite | DONE (`VERIFIED_HOST_ONLY`) |
 | Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
-| Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
+| Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 (+RT-02 follow-up) in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
+| Host-vs-target test records | Every test record carries runtime=host\|target, enforced | Required key, invalid/missing token -> exit 2 `BUNDLE_INVALID`; collector always writes `host` (no real QNX execution path yet) | DONE (`VERIFIED_HOST_ONLY`) |
+| Expected-test omission detection | Declared test names absent from evidence are a hard failure | `funes expect-tests`; unsatisfied declaration -> exit 10 `MISSING_EXPECTED_TEST`; re-declaration and duplicate names refused by the collector | DONE (`VERIFIED_HOST_ONLY`) |
+| Structured JSON test-report adapter | Hardened parser, strict schema, adversarial input rejected | `import-test --format json`; 1200-deep nesting bomb, duplicate key, trailing garbage, >1 MiB report all rejected cleanly, no crash (`src/json_min.c`, ADR-003) | DONE (`VERIFIED_HOST_ONLY`) |
+| Evidence-format version bump | New fields require a schema bump, old schema cleanly rejected | `schema_version` 1->2 (`docs/spec/EVIDENCE-BUNDLE-v2.md`); a `schema_version=1` bundle is `UNSUPPORTED_SCHEMA` | DONE (`VERIFIED_HOST_ONLY`) |
 
 ## Test accounting
 
-- Actually run: 74 host checks (unit-via-CLI, integration, adversarial; Level 3 signing/trust, Level 5 comparison, and Red Team Round 1 regressions RT-01..RT-06 included).
+- Actually run: 97 host checks (unit-via-CLI, integration, adversarial;
+  Level 3 signing/trust, Level 5 comparison, Red Team Round 1 regressions
+  RT-01..RT-06 plus the RT-02 follow-up, and Level 4 host-only test-evidence
+  checks included).
 - Contract tests against the real QNX SDP: 0.
 - Synthetic/synthetic-labeled exercises: the tamper/missing/schema bundles
   are mutations of a real captured bundle, produced by the suite at test
   time; no pre-made "QNX evidence" exists anywhere in the repo.
 - Actual QNX SDK runs: 0. Actual QNX runtime runs: 0.
-- Not run: fuzzing (Level 6), comparison (Level 5),
-  QEMU (Level 4).
+- Not run: fuzzing (Level 6), QEMU (Level 4 target/QNX part).
 - Failures still open: none in the host suite. One defect was found and
   fixed during Level 1 (duplicate blob key when stdout and stderr are
   identical bytes; see commit message).

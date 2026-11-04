@@ -5,6 +5,7 @@
 #define _DEFAULT_SOURCE
 
 #include "sha256.h"
+#include "json_min.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -28,6 +29,7 @@
 #include <unistd.h>
 
 #define MAX_CAPTURE_BYTES (1024u * 1024u)
+#define MAX_TEST_REPORT_BYTES (1024u * 1024u)
 #define DEFAULT_TIMEOUT_SEC 120
 
 static void die(const char *fmt, ...) {
@@ -654,15 +656,21 @@ static void usage(FILE *out) {
         "  funes doctor [--json]\n"
         "  funes capture --out DIR [--source FILE]... [--artifact PATH:ROLE]...\n"
         "                [--timeout-sec N] [--epoch N] -- CMD [ARGS...]\n"
-        "  funes add-test --bundle DIR --artifact-sha256 HEX\n"
+        "  funes add-test --bundle DIR --artifact-sha256 HEX [--name NAME]\n"
         "                [--timeout-sec N] [--epoch N] -- CMD [ARGS...]\n"
         "  funes import-test --bundle DIR --artifact-sha256 HEX --report FILE\n"
+        "                [--name NAME] [--format json]\n"
+        "  funes expect-tests --bundle DIR -- NAME [NAME...]\n"
         "  funes keygen --out SEEDFILE --pub-out PUBFILE\n"
         "  funes sign --bundle DIR --key SEEDFILE\n"
         "  funes compare [--json] BUNDLE_A BUNDLE_B\n"
         "  funes --help\n"
         "capture/add-test exit status mirrors the executed command; the bundle\n"
-        "is sealed even when that command fails. See docs/spec/.\n");
+        "is sealed even when that command fails. Every test record carries\n"
+        "runtime=host (there is no QNX execution path yet). expect-tests\n"
+        "declares, exactly once per bundle, the test names the evidence must\n"
+        "contain; a declared name with no matching test is MISSING_EXPECTED_TEST\n"
+        "at verification. See docs/spec/.\n");
 }
 
 static int cmd_doctor(int json) {
@@ -738,7 +746,7 @@ static int cmd_capture(int argc, char **argv) {
     mkdirs_for_bundle(out);
     linelist l;
     ll_init(&l);
-    ll_add(&l, "schema_version=1");
+    ll_add(&l, "schema_version=2");
     ll_add(&l, "build.origin=OBSERVED");
     /* Source state before the build runs. */
     char *head = git_query("rev-parse", "HEAD");
@@ -825,9 +833,36 @@ static int cmd_capture(int argc, char **argv) {
     return rc;
 }
 
+/* Reads a report file fully (stat-checked against MAX_TEST_REPORT_BYTES
+ * before any read, same stat-first discipline as the verifier's blob-size
+ * check) and parses it as a strict JSON test report. Dies on any failure;
+ * on success returns the parsed report and the caller owns freeing it. */
+static void parse_json_report(const char *path, json_test_report *out) {
+    struct stat rst;
+    if (stat(path, &rst) != 0) die("import-test: cannot stat report %s: %s", path, strerror(errno));
+    if (!S_ISREG(rst.st_mode)) die("import-test: report %s is not a regular file", path);
+    if ((uint64_t)rst.st_size > MAX_TEST_REPORT_BYTES)
+        die("import-test: report %s exceeds %u bytes, refusing to parse as JSON", path, MAX_TEST_REPORT_BYTES);
+    FILE *f = fopen(path, "rb");
+    if (!f) die("import-test: cannot open report %s: %s", path, strerror(errno));
+    size_t sz = (size_t)rst.st_size;
+    uint8_t *buf = xmalloc(sz + 1);
+    size_t got = sz ? fread(buf, 1, sz, f) : 0;
+    fclose(f);
+    if (got != sz) { free(buf); die("import-test: short read on report %s", path); }
+    char jerr[256];
+    if (!json_test_report_parse((const char *)buf, sz, out, jerr, sizeof(jerr))) {
+        free(buf);
+        die("import-test: malformed JSON report %s: %s", path, jerr);
+    }
+    free(buf);
+}
+
 static int cmd_add_test(int argc, char **argv, int imported, const char *report) {
     const char *bundle = NULL;
     const char *adigest = NULL;
+    const char *name = NULL;
+    const char *format = NULL;
     int timeout_sec = DEFAULT_TIMEOUT_SEC;
     long long epoch = -1;
     int i = 0;
@@ -837,12 +872,21 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
         else if (strcmp(argv[i], "--artifact-sha256") == 0 && i + 1 < argc) adigest = argv[++i];
         else if (strcmp(argv[i], "--timeout-sec") == 0 && i + 1 < argc) timeout_sec = atoi(argv[++i]);
         else if (strcmp(argv[i], "--epoch") == 0 && i + 1 < argc) epoch = atoll(argv[++i]);
+        else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) name = argv[++i];
+        else if (strcmp(argv[i], "--format") == 0 && i + 1 < argc) format = argv[++i];
+        /* --report's value was already captured by main() before this
+         * function was called; recognize and skip it here too so parsing
+         * can continue past it to --name/--format regardless of argument
+         * order (otherwise an unrecognized flag would stop the loop). */
+        else if (strcmp(argv[i], "--report") == 0 && i + 1 < argc) i++;
         else if (!imported) die("add-test: unknown or incomplete option %s", argv[i]);
         else break;
         i++;
     }
     if (!bundle) die("add-test/import-test: --bundle DIR is required");
     if (!adigest || !is_hex64(adigest)) die("--artifact-sha256 must be 64 lowercase hex characters");
+    if (format && !imported) die("add-test: --format is only valid with import-test");
+    if (format && strcmp(format, "json") != 0) die("import-test: unsupported --format %s (only json is supported)", format);
     linelist l;
     ll_init(&l);
     load_manifest(bundle, &l);
@@ -851,6 +895,17 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
     int idx = count_tests(&l);
     if (imported) {
         if (!report) die("import-test: --report FILE is required");
+        /* Structured JSON report adapter (Level 4, ADR-003): parsed BEFORE
+         * the file is stored as a blob, so a malformed report never gets
+         * partially recorded. The CLI --name wins over a JSON "name" field
+         * if both are given. */
+        json_test_report jr;
+        memset(&jr, 0, sizeof(jr));
+        bool have_json = false;
+        if (format) {
+            parse_json_report(report, &jr);
+            have_json = true;
+        }
         char hex[65];
         uint64_t sz = 0;
         store_blob_file(bundle, report, hex, &sz);
@@ -858,8 +913,21 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
         snprintf(pfx, sizeof(pfx), "test.%d", idx);
         ll_printf(&l, "%s.origin=IMPORTED", pfx);
         ll_printf(&l, "%s.artifact_sha256=%s", pfx, adigest);
+        ll_printf(&l, "%s.runtime=host", pfx);
+        const char *effective_name = name ? name : (have_json ? jr.name : NULL);
+        if (effective_name) {
+            char *nh = hex_encode(effective_name);
+            ll_printf(&l, "%s.name.hex=%s", pfx, nh);
+            free(nh);
+        }
         ll_printf(&l, "%s.report_sha256=%s", pfx, hex);
         ll_printf(&l, "%s.report_size=%llu", pfx, (unsigned long long)sz);
+        if (have_json) {
+            ll_printf(&l, "%s.report_format=JSON", pfx);
+            ll_printf(&l, "%s.report_passed=%d", pfx, jr.passed ? 1 : 0);
+            ll_printf(&l, "%s.report_case_count=%zu", pfx, jr.case_count);
+            json_test_report_free(&jr);
+        }
         ll_add_blob(&l, hex, (unsigned long long)sz, "imported-report");
         ll_printf(&l, "test_count=%d", idx + 1);
         seal_bundle(bundle, &l);
@@ -873,6 +941,17 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
     snprintf(pfx, sizeof(pfx), "test.%d", idx);
     ll_printf(&l, "%s.origin=OBSERVED", pfx);
     ll_printf(&l, "%s.artifact_sha256=%s", pfx, adigest);
+    /* Host-vs-target distinction (Level 4): always "host" here -- there is
+     * no genuine QNX execution path yet (Level 2/4-QEMU remain BLOCKED), and
+     * a flag letting a caller claim "target" without real QNX execution
+     * would be exactly the overclaiming this project's threat model
+     * forbids. A future QEMU/QNX integration is what produces "target". */
+    ll_printf(&l, "%s.runtime=host", pfx);
+    if (name) {
+        char *nh = hex_encode(name);
+        ll_printf(&l, "%s.name.hex=%s", pfx, nh);
+        free(nh);
+    }
     add_argv_lines(&l, pfx, cmd, cmdargc);
     capture_result r;
     run_capture(cmd, timeout_sec, epoch, &r);
@@ -884,6 +963,48 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
     free(r.out_buf);
     free(r.err_buf);
     return rc;
+}
+
+/* funes expect-tests --bundle DIR -- NAME... (Level 4): declares, exactly
+ * once per bundle, the test names this bundle's evidence must contain.
+ * Declaring expectations after the fact to match whatever happened would
+ * launder away a real omission, so re-declaration is refused -- the same
+ * justification as keygen refusing to overwrite an existing key. */
+static int cmd_expect_tests(int argc, char **argv) {
+    const char *bundle = NULL;
+    int i = 0;
+    while (i < argc) {
+        if (strcmp(argv[i], "--") == 0) { i++; break; }
+        if (strcmp(argv[i], "--bundle") == 0 && i + 1 < argc) bundle = argv[++i];
+        else die("expect-tests: unknown or incomplete option %s", argv[i]);
+        i++;
+    }
+    if (!bundle) die("expect-tests: --bundle DIR is required");
+    int nnames = argc - i;
+    if (nnames <= 0) die("expect-tests: at least one NAME is required after --");
+    char **names = &argv[i];
+    for (int a = 0; a < nnames; a++)
+        for (int b = a + 1; b < nnames; b++)
+            if (strcmp(names[a], names[b]) == 0) die("expect-tests: duplicate expected test name %s", names[a]);
+    linelist l;
+    ll_init(&l);
+    load_manifest(bundle, &l);
+    if (ll_has_prefix(&l, "expected_test_count="))
+        die("expect-tests: bundle %s already has declared expectations; expectations may be declared exactly once per bundle", bundle);
+    /* load_manifest() strips test_count on load (every caller that adds a
+     * test record recomputes and re-adds it); this command adds no test
+     * record, so it must put the unchanged count back itself or the
+     * reseal would silently drop a required key. */
+    ll_printf(&l, "test_count=%d", count_tests(&l));
+    ll_printf(&l, "expected_test_count=%d", nnames);
+    for (int a = 0; a < nnames; a++) {
+        char *h = hex_encode(names[a]);
+        ll_printf(&l, "expected_test.%d.name.hex=%s", a, h);
+        free(h);
+    }
+    seal_bundle(bundle, &l);
+    printf("declared %d expected test(s) for bundle %s\n", nnames, bundle);
+    return 0;
 }
 
 /* --- Level 5: forensic comparison. Consumes the independent verifier
@@ -1071,6 +1192,7 @@ int main(int argc, char **argv) {
         if (!report) die("import-test: --report FILE is required");
         return cmd_add_test(argc - 2, argv + 2, 1, report);
     }
+    if (strcmp(argv[1], "expect-tests") == 0) return cmd_expect_tests(argc - 2, argv + 2);
     fprintf(stderr, "funes: unknown command %s\n", argv[1]);
     usage(stderr);
     return 1;
