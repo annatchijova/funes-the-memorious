@@ -33,3 +33,57 @@ jobs:
         run: ./fuzz/bin/fuzz_manifest -max_total_time=30 fuzz/corpus/manifest
       - name: JSON report parser -- 30s smoke run against seed corpus
         run: ./fuzz/bin/fuzz_json_report -max_total_time=30 fuzz/corpus/json
+
+  # Static-analysis lint gate (Level 6). cppcheck, not clang-tidy: the build
+  # already enforces -Wall -Wextra -Werror with gcc, and clang-tidy would
+  # mostly duplicate that; cppcheck is a genuinely complementary check with
+  # no new toolchain dependency. --check-level=exhaustive (not the default
+  # "normal" level) so the gate does real, deeper analysis rather than
+  # suppressing cppcheck's own "I only looked at some branches" notice.
+  # Every finding this gate has ever produced was triaged: real issues
+  # fixed (die() marked __attribute__((noreturn)), a handful of genuine
+  # const-correctness fixes), false positives suppressed inline with a
+  # one-line reason each (grep `cppcheck-suppress` in src/ and verifier/).
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: cppcheck (warning + style, exhaustive)
+        run: cppcheck --enable=warning,style --inline-suppr --error-exitcode=1 --std=c11 --check-level=exhaustive src/ verifier/
+
+  # Secret scanning (Level 6). Uses the gitleaks CLI binary directly
+  # (MIT-licensed, github.com/gitleaks/gitleaks) rather than the
+  # `gitleaks/gitleaks-action` GitHub Action wrapper: that wrapper ships
+  # under a separate commercial EULA (see its action.yml's license header),
+  # which is not something to commit this repository to without the
+  # author's explicit sign-off, per this project's existing license
+  # cleanliness stance (ADR-001: "no proprietary QNX content"). The actual
+  # scanning engine used here carries no such restriction. Pin an exact
+  # release version for reproducibility, same as every other tool version
+  # pinned in this workflow.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (MIT-licensed CLI)
+        run: |
+          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+      - name: Scan full git history for secrets
+        run: ./gitleaks detect --source . -v
+
+  # Documentation smoke test (Level 6): runs docs/DEMO.md's commands
+  # verbatim and asserts the specific outcomes the doc claims (a tampered
+  # bundle exiting non-zero is correct behavior, not a CI failure -- see
+  # scripts/demo-smoke.sh).
+  demo-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run docs/DEMO.md verbatim and check its stated outcomes
+        run: sh scripts/demo-smoke.sh

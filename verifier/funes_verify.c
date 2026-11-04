@@ -601,7 +601,7 @@ int main(int argc, char **argv) {
     }
     DIR *d = fdopendir(bfd);
     if (!d) { close(bfd); FAIL("BUNDLE_INVALID", 2, "blob directory unreadable"); }
-    struct dirent *de;
+    const struct dirent *de;
     while ((de = readdir(d)) != NULL) {
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
         char k2[512];
@@ -617,7 +617,7 @@ int main(int argc, char **argv) {
     {
         DIR *rd = opendir(bundle);
         if (!rd) FAIL("BUNDLE_INVALID", 2, "bundle directory unreadable");
-        struct dirent *re;
+        const struct dirent *re;
         while ((re = readdir(rd)) != NULL) {
             if (strcmp(re->d_name, ".") == 0 || strcmp(re->d_name, "..") == 0) continue;
             if (strcmp(re->d_name, "manifest.txt") && strcmp(re->d_name, "SEAL.txt") &&
@@ -643,7 +643,7 @@ int main(int argc, char **argv) {
             }
             DIR *sd = fdopendir(sfd);
             if (!sd) { close(sfd); FAIL("BUNDLE_INVALID", 2, "signatures directory unreadable"); }
-            struct dirent *se;
+            const struct dirent *se;
             while ((se = readdir(sd)) != NULL) {
                 if (strcmp(se->d_name, ".") == 0 || strcmp(se->d_name, "..") == 0) continue;
                 if (strcmp(se->d_name, "ed25519.sig") && strcmp(se->d_name, "signer.txt")) {

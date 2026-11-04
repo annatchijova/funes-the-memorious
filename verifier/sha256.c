@@ -27,6 +27,17 @@ static const uint32_t K[64] = {
     0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u};
 
 static void sha256_transform(funes_sha256_ctx *ctx, const uint8_t data[]) {
+    /* All round-function temporaries declared together, including t1/t2
+     * (cppcheck-suppress variableScope below): this is the conventional
+     * layout for SHA-256 reference implementations, not an oversight --
+     * narrowing t1/t2 into the compression loop would diverge from that
+     * familiar shape for a pure style nit on a hash primitive, which is
+     * not worth the risk of a transcription slip in crypto code. This file
+     * and its sibling copy (collector/verifier) are intentionally byte-identical (the
+     * verifier must not link the collector's copy -- see
+     * docs/spec/VERIFIER-SEMANTICS.md), so the same suppression applies
+     * here for the same reason. */
+    // cppcheck-suppress variableScope
     uint32_t a, b, c, d, e, f, g, h, t1, t2, m[64];
     for (int i = 0, j = 0; i < 16; ++i, j += 4) {
         m[i] = ((uint32_t)data[j] << 24) | ((uint32_t)data[j + 1] << 16) |

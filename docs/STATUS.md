@@ -19,7 +19,7 @@ make test                 # sh tests/run_tests.sh
 ./bin/funes doctor --json
 ```
 
-Observed test outcome: **120 PASS, 0 FAIL** (`RESULT: pass=120 fail=0`, suite
+Observed test outcome: **122 PASS, 0 FAIL** (`RESULT: pass=122 fail=0`, suite
 exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Validation matrix
@@ -45,8 +45,8 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | QNX `qcc` detected | Actual tool/environment | Doctor reports `NOT_FOUND` on this host | BLOCKED |
 | QNX 8 target compiled | Actual compiler and binary | Not attempted without SDP | BLOCKED (`NOT_RUN`) |
 | QNX QEMU runtime | Actual execution evidence | Not attempted | NOT_RUN |
-| README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
-| Security tests | Passed/failed counts | Hostile cases above are part of the 120-check suite | DONE (`VERIFIED_HOST_ONLY`) |
+| README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host; CI runs it verbatim every push via `scripts/demo-smoke.sh` (`demo-smoke` job), which also caught and fixed a real doc ordering bug (see Level 6) | DONE (`VERIFIED_HOST_ONLY`) |
+| Security tests | Passed/failed counts | Hostile cases above are part of the 122-check suite | DONE (`VERIFIED_HOST_ONLY`) |
 | Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
 | Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 (+RT-02 follow-up) in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
 | Host-vs-target test records | Every test record carries runtime=host\|target, enforced | Required key, invalid/missing token -> exit 2 `BUNDLE_INVALID`; collector always writes `host` (no real QNX execution path yet) | DONE (`VERIFIED_HOST_ONLY`) |
@@ -57,10 +57,13 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | Command timeout enforcement | Killed, not left running; evidence preserved | `sleep 30` under `--timeout-sec 1` killed within seconds, recorded `signaled=1`/`signal=9`, bundle verifies -- closes an item carried since Level 1 | DONE (`VERIFIED_HOST_ONLY`) |
 | Parser fuzzing (manifest tokenizer + JSON report parser) | No crash against seed corpus + bounded mutation | `fuzz/fuzz_manifest.c`, `fuzz/fuzz_json_report.c`; CI `fuzz-smoke` job runs both for 30s/target on every push (`clang` unavailable in this dev sandbox -- verified locally via a stub harness instead, documented honestly in `docs/security/FUZZING.md`) | DONE (`VERIFIED_HOST_ONLY`; CI is the only environment that runs the real libFuzzer binaries) |
 | Resource budgets | Every size/count/depth cap enumerated with its test coverage, and now a dedicated regression per cap | `docs/security/RESOURCE-LIMITS.md`; `tests/run_tests.sh` "resource budget boundaries" (oversized manifest, line count, artifact/test/expected_test counts, argv_count) plus the JSON string-length case in the Level 4 section -- consolidation only, no new limits added | DONE (`VERIFIED_HOST_ONLY`) |
+| Static-analysis lint gate | Every real finding fixed, every false positive justified inline | `cppcheck --enable=warning,style --check-level=exhaustive`, CI `lint` job; `die()` marked `__attribute__((noreturn))` (the real fix behind 4 false-positive `doubleFree` reports), several genuine const-correctness fixes, 2 true false positives suppressed with a one-line reason each (grep `cppcheck-suppress`) | DONE (`VERIFIED_HOST_ONLY`; CI job itself not yet observed running in real GitHub Actions, only its exact command verified locally) |
+| Secret scanning | No committed secret, including in history | `gitleaks detect --source . -v` (MIT-licensed CLI, not the commercially-licensed `gitleaks-action` wrapper) run locally against all 11 commits: `no leaks found`; CI `secret-scan` job runs the same on every push | DONE (`VERIFIED_HOST_ONLY` for the local run; CI job not yet observed running) |
+| Packaged release + limitation matrix | Verifiable artifact, checksummed; plain-language limitation statement | `scripts/release.sh` produces `dist/funes-<sha>.tar.gz` + `.SHA256SUMS`; `sha256sum -c` verified `OK` locally; `docs/LIMITATIONS.md` for the reader-facing boundary statement (`docs/STATUS.md`, this file, stays the detailed log) | DONE (`VERIFIED_HOST_ONLY`; creating an actual git tag or GitHub Release is left to the author, by design) |
 
 ## Test accounting
 
-- Actually run: 120 host checks (unit-via-CLI, integration, adversarial;
+- Actually run: 122 host checks (unit-via-CLI, integration, adversarial;
   Level 3 signing/trust, Level 5 comparison, Red Team Round 1 regressions
   RT-01..RT-06 plus the RT-02 follow-up, Red Team Round 2 regressions
   (RT2-04), Level 4 host-only test-evidence checks, the timeout regression
@@ -75,8 +78,17 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
   (`fuzz-smoke` job); this dev sandbox has no `clang`, so it was verified
   locally only via a stub harness, not a real fuzzing run (see
   `docs/security/FUZZING.md`). Not a continuous fuzzing campaign either way.
-- Not run: QEMU (Level 4 target/QNX part); packaged release with checksums
-  (Level 6, not started).
+- Static analysis (`cppcheck --check-level=exhaustive`) and secret
+  scanning (`gitleaks`, full history) both run clean, verified with the
+  exact CI commands on this host; neither has yet been observed running
+  inside real GitHub Actions (same caveat as `fuzz-smoke` above).
+- Packaged release: `scripts/release.sh` produces a real tarball +
+  SHA256SUMS, `sha256sum -c` verified `OK` locally; no git tag or GitHub
+  Release has been created (deliberately left to the author).
+- Not run: QEMU (Level 4 target/QNX part). Level 6 is otherwise complete;
+  see `docs/ROADMAP.md`'s Level 6 closure note for the two honest caveats
+  above (gitleaks CLI vs. the commercially-licensed Action wrapper; CI
+  jobs verified locally, not yet observed running in GitHub Actions).
 - Failures still open: none in the host suite. One defect was found and
   fixed during Level 1 (duplicate blob key when stdout and stderr are
   identical bytes; see commit message).

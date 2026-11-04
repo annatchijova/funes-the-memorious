@@ -42,12 +42,19 @@ Expected observations: the first verify prints
 
 ## Failure evidence (also real)
 
+A fresh bundle, deliberately separate from the mutated one above, so this
+section stands on its own regardless of what order a reader runs things in.
+
 ```bash
 # A failing test is evidence, not an embarrassment to delete.
-./bin/funes add-test --bundle /tmp/funes-demo/bundle \
-  --artifact-sha256 "$ART" -- /tmp/funes-demo/app fail   # exits 3
-grep 'exit_status=3' /tmp/funes-demo/bundle/manifest.txt
+mkdir -p /tmp/funes-demo2
+cp examples/host-hello/main.c /tmp/funes-demo2/main.c
+./bin/funes capture --out /tmp/funes-demo2/bundle \
+  --artifact /tmp/funes-demo2/app:target-executable \
+  -- gcc -std=c11 -O2 -o /tmp/funes-demo2/app /tmp/funes-demo2/main.c
+ART2=$(grep '^artifact.0.sha256=' /tmp/funes-demo2/bundle/manifest.txt | cut -d= -f2)
+./bin/funes add-test --bundle /tmp/funes-demo2/bundle \
+  --artifact-sha256 "$ART2" -- /tmp/funes-demo2/app fail   # exits 3
+grep 'exit_status=3' /tmp/funes-demo2/bundle/manifest.txt
+./bin/funes-verify /tmp/funes-demo2/bundle   # still INTEGRITY_VALID -- the failing test is preserved, not hidden
 ```
-
-(Restore the mutated blob first — copy the bundle before Act IV — or
-recapture, since the mutated bundle correctly no longer verifies.)

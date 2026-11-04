@@ -153,6 +153,7 @@ test-output/
 fuzz-corpus/
 fuzz-out/
 fuzz/bin/
+dist/
 crash-*
 leak-*
 oom-*

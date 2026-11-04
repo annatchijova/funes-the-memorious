@@ -32,6 +32,7 @@
 #define MAX_TEST_REPORT_BYTES (1024u * 1024u)
 #define DEFAULT_TIMEOUT_SEC 120
 
+static void die(const char *fmt, ...) __attribute__((noreturn));
 static void die(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -130,7 +131,7 @@ static void ll_printf(linelist *l, const char *fmt, ...) {
     ll_add(l, tmp);
 }
 
-static bool ll_has_prefix(linelist *l, const char *prefix) {
+static bool ll_has_prefix(const linelist *l, const char *prefix) {
     size_t n = strlen(prefix);
     for (size_t i = 0; i < l->count; i++) {
         if (strncmp(l->lines[i], prefix, n) == 0) return true;
@@ -140,7 +141,7 @@ static bool ll_has_prefix(linelist *l, const char *prefix) {
 
 /* Blob lines are keyed by digest alone: identical bytes (e.g. empty stdout
  * and stderr) must produce one blob line, or the manifest has duplicate keys. */
-static bool ll_has_blob(linelist *l, const char *digest) {
+static bool ll_has_blob(const linelist *l, const char *digest) {
     char key[80];
     snprintf(key, sizeof(key), "blob.%s=", digest);
     return ll_has_prefix(l, key);
@@ -295,6 +296,15 @@ static void buf_append(uint8_t **buf, size_t *len, const uint8_t *data, size_t n
     if (*len >= MAX_CAPTURE_BYTES) { *trunc = 1; return; }
     size_t room = MAX_CAPTURE_BYTES - *len;
     size_t take = n < room ? n : room;
+    /* cppcheck false positive (knownConditionTrueFalse): its branch-limited
+     * analysis only reasons about the n<room arm of the ternary (where
+     * take==n makes take<n trivially false) and misses that in the n>=room
+     * arm, take==room, so take<n == room<n, true whenever n>room. This is
+     * the truncation flag for over-sized output; tests/run_tests.sh's
+     * "oversized output flagged truncated" case already exercises this
+     * exact line and passes -- empirical proof the branch is reachable and
+     * correct. */
+    // cppcheck-suppress knownConditionTrueFalse
     if (take < n) *trunc = 1;
     *buf = xrealloc(*buf, *len + take + 1);
     memcpy(*buf + *len, data, take);
@@ -460,7 +470,7 @@ static void load_manifest(const char *bundle, linelist *l) {
     fclose(f);
 }
 
-static int count_tests(linelist *l) {
+static int count_tests(const linelist *l) {
     int mx = -1;
     for (size_t i = 0; i < l->count; i++) {
         int idx = -1;
