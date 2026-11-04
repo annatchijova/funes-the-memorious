@@ -1,0 +1,235 @@
+# FUNES THE MEMORIOUS — .gitignore
+# Language: C (host collector + independent verifier + QNX fixture)
+# Host: Linux. Target ecosystem: QNX SDP 8.0.
+# Rule: source, specs, tests and docs are committed.
+# Build outputs, evidence bundles, keys and SDK material are never committed.
+
+# ---------------------------------------------------------------------------
+# C build artifacts
+# ---------------------------------------------------------------------------
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.lo
+*.la
+*.slo
+*.ko
+*.gcno
+*.gcda
+*.gcov
+
+# Linker / debugger byproducts
+*.map
+*.exp
+*.ilk
+*.pdb
+core
+core.*
+vgcore.*
+callgrind.out.*
+cachegrind.out.*
+massif.out.*
+
+# Precompiled headers
+*.gch
+*.pch
+
+# ---------------------------------------------------------------------------
+# Build directories and generated build systems
+# ---------------------------------------------------------------------------
+build/
+build-*/
+out/
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+_deps/
+
+# Autotools generated files (if ever introduced)
+autom4te.cache/
+aclocal.m4
+config.h
+config.log
+config.status
+configure
+Makefile.in
+stamp-h1
+libtool
+.deps/
+.libs/
+
+# Meson / Ninja
+build.ninja
+meson-info/
+meson-logs/
+meson-private/
+.ninja_deps
+.ninja_log
+
+# ---------------------------------------------------------------------------
+# FUNES evidence output — generated, never committed as "real" evidence
+# ---------------------------------------------------------------------------
+# Real evidence bundles are produced locally and shared out-of-band.
+# Only hand-written fixtures under tests/fixtures/ or examples/ may be committed,
+# and synthetic material must live under examples/synthetic/ with a banner.
+evidence/
+bundles/
+*.funes/
+*.funes-evidence/
+funes-evidence/
+*.bundle.tar
+*.bundle.tar.gz
+*.bundle.zip
+
+# Collector / verifier runtime output
+*.stdout.log
+*.stderr.log
+*.trace
+*.pcap
+
+# ---------------------------------------------------------------------------
+# Signing keys and secrets — NEVER commit
+# ---------------------------------------------------------------------------
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+*.signing-key
+keys/
+secrets/
+.env
+.env.*
+!.env.example
+*.secret
+credentials.json
+token.txt
+
+# QNX license / activation material
+*.lic
+qnx-license*
+*license*.key
+
+# ---------------------------------------------------------------------------
+# QNX SDP — proprietary SDK must never be committed
+# ---------------------------------------------------------------------------
+# SDK installs, target sysroots and licensed samples stay outside the repo.
+qnxsdp*/
+QNX*/
+sdp*/
+**/qnx-sdk/
+*.qnxbin
+# QNX build outputs (target binaries are artifacts, not source)
+*.qnx
+o-*/
+*-qnx-*/
+
+# ---------------------------------------------------------------------------
+# Test and fuzz artifacts
+# ---------------------------------------------------------------------------
+tests/**/output/
+test-output/
+fuzz-corpus/
+fuzz-out/
+crash-*
+leak-*
+oom-*
+slow-unit-*
+*.fuzz.log
+coverage/
+*.profraw
+*.profdata
+lcov.info
+coverage.info
+
+# ---------------------------------------------------------------------------
+# Editors and IDEs
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+.project
+.cproject
+.settings/
+.classpath
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# ---------------------------------------------------------------------------
+# Operating system files
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.directory
+.Trash-*
+
+# ---------------------------------------------------------------------------
+# Temporary files, logs and caches
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+tmp/
+temp/
+.cache/
+*.cache
+
+# Python tooling that may appear in docs/CI helpers (not the product language)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node tooling that may appear in docs site helpers (not the product language)
+node_modules/
+
+# ---------------------------------------------------------------------------
+# Archives and compressed files (except explicitly tracked fixtures)
+# ---------------------------------------------------------------------------
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+*.xz
+*.bz2
+
+# ---------------------------------------------------------------------------
+# Local agent / assistant state — not product source
+# ---------------------------------------------------------------------------
+.claude/
+.codex/
+.agents/
+.muse/
