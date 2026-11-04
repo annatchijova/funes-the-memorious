@@ -151,6 +151,67 @@ $VERIFY "$TMP/b1_v1shape" >"$TMP/vschema1.txt" 2>&1
 expect_exit 5 $? "v1-shaped bundle (schema_version=1, no runtime field) rejected cleanly"
 grep -q "UNSUPPORTED_SCHEMA" "$TMP/vschema1.txt"; ok $? "v1-shaped bundle named UNSUPPORTED_SCHEMA, not a confusing missing-key error"
 
+echo "== resource budget boundaries (Level 6, closes RESOURCE-LIMITS.md recommendations) =="
+# Oversized manifest: the stat-first size check fires before SEAL.txt is
+# even read, so no reseal is needed -- this bundle is never otherwise
+# well-formed past that point, by design.
+cp -r "$TMP/b1" "$TMP/b1_oversized"
+head -c 1200000 /dev/zero >>"$TMP/b1_oversized/manifest.txt"
+$VERIFY "$TMP/b1_oversized" >"$TMP/vbudget1.txt" 2>&1
+expect_exit 6 $? "oversized manifest (>1 MiB) rejected"
+grep -q "RESOURCE_LIMIT_EXCEEDED" "$TMP/vbudget1.txt"; ok $? "oversized manifest named RESOURCE_LIMIT_EXCEEDED"
+
+# build.argv_count > 256: the cap is checked right after reading the
+# declared count, before any argv.<n>.hex line is required to exist.
+cp -r "$TMP/b1" "$TMP/b1_argvcount"
+sed -i 's/^build\.argv_count=.*/build.argv_count=300/' "$TMP/b1_argvcount/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/b1_argvcount/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_argvcount/SEAL.txt"
+$VERIFY "$TMP/b1_argvcount" >"$TMP/vbudget2.txt" 2>&1
+expect_exit 2 $? "build.argv_count > 256 rejected (BUNDLE_INVALID, not RESOURCE_LIMIT_EXCEEDED -- existing classification)"
+
+# artifact_count/test_count > 1024: same pattern -- checked right after
+# the declared count is read, before any artifact.<n>.* line is required.
+cp -r "$TMP/b1" "$TMP/b1_artcount"
+sed -i 's/^artifact_count=.*/artifact_count=2000/' "$TMP/b1_artcount/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/b1_artcount/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_artcount/SEAL.txt"
+$VERIFY "$TMP/b1_artcount" >"$TMP/vbudget3.txt" 2>&1
+expect_exit 6 $? "artifact_count > 1024 rejected"
+grep -q "RESOURCE_LIMIT_EXCEEDED" "$TMP/vbudget3.txt"; ok $? "oversized artifact_count named RESOURCE_LIMIT_EXCEEDED"
+
+# expected_test_count > 1024: declare one real expectation, then inflate
+# the count past the cap -- checked before any expected_test.<n>.name.hex
+# is required to exist.
+$FUNES capture --out "$TMP/bexp" -- /bin/true >"$TMP/capexp.log" 2>&1
+$FUNES expect-tests --bundle "$TMP/bexp" -- one_real_name >"$TMP/expexp.log" 2>&1
+sed -i 's/^expected_test_count=.*/expected_test_count=2000/' "$TMP/bexp/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/bexp/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/bexp/SEAL.txt"
+$VERIFY "$TMP/bexp" >"$TMP/vbudget4.txt" 2>&1
+expect_exit 6 $? "expected_test_count > 1024 rejected"
+grep -q "RESOURCE_LIMIT_EXCEEDED" "$TMP/vbudget4.txt"; ok $? "oversized expected_test_count named RESOURCE_LIMIT_EXCEEDED"
+
+# Manifest line count > 10000: constructed directly (not a mutated real
+# bundle) -- header plus 9999 unique, individually-valid blob.<hex> lines,
+# plus one trailing line whose own content is irrelevant because the line-
+# count cap fires before that line is ever inspected. Decimal-digit
+# "digests" are used because 0-9 are themselves valid lowercase hex
+# characters, so is_hex64()/key_allowed() accept them without needing a
+# real SHA-256 or an existing blob file (never reached -- tokenizing fails
+# first). No blobs/ directory is needed for the same reason.
+mkdir -p "$TMP/b1_manylines"
+awk 'BEGIN{
+    print "FUNES-BUNDLE-1";
+    for (i = 0; i < 9999; i++) printf "blob.%064d=0:stdout\n", i;
+    print "trigger_line=1";
+}' >"$TMP/b1_manylines/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/b1_manylines/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_manylines/SEAL.txt"
+$VERIFY "$TMP/b1_manylines" >"$TMP/vbudget5.txt" 2>&1
+expect_exit 6 $? "manifest line count > 10000 rejected"
+grep -q "RESOURCE_LIMIT_EXCEEDED" "$TMP/vbudget5.txt"; ok $? "oversized line count named RESOURCE_LIMIT_EXCEEDED"
+
 echo "== imported report stays IMPORTED =="
 $FUNES capture --out "$TMP/b2" --source "$TMP/work/main.c" \
     --artifact "$TMP/work/app2:target-executable" \
@@ -415,6 +476,12 @@ print('{\"passed\":true,\"cases\":[' + ','.join('{\"name\":\"x\",\"passed\":true
 awk 'BEGIN{s="{\"passed\":true,\"cases\":[";for(i=0;i<40000;i++){if(i)s=s",";s=s"{\"name\":\"x\",\"passed\":true}"};s=s"]}";print s}' >"$TMP/l4j_huge.json"
 [ "$(wc -c <"$TMP/l4j_huge.json")" -gt 1048576 ]; ok $? "oversized report fixture exceeds 1 MiB cap"
 mkjsoncase huge "$TMP/l4j_huge.json" 1
+
+LONGNAME=$(awk 'BEGIN{for(i=0;i<70000;i++)printf "x"}')
+printf '{"passed":true,"cases":[{"name":"%s","passed":true}]}' "$LONGNAME" >"$TMP/l4j_longstr.json"
+[ "$(wc -c <"$TMP/l4j_longstr.json")" -lt 1048576 ]; ok $? "long-string fixture stays under the 1 MiB file cap (isolates the string-length cap specifically)"
+mkjsoncase longstr "$TMP/l4j_longstr.json" 1
+grep -q "test_count=0" "$TMP/l4j_longstr/manifest.txt"; ok $? "rejected long-string report wrote nothing to the bundle"
 
 echo "== red team round 2 follow-up: signature status on an unreached check =="
 cp -r "$TMP/bs" "$TMP/bs_unreachedsig"

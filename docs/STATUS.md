@@ -19,7 +19,7 @@ make test                 # sh tests/run_tests.sh
 ./bin/funes doctor --json
 ```
 
-Observed test outcome: **108 PASS, 0 FAIL** (`RESULT: pass=108 fail=0`, suite
+Observed test outcome: **120 PASS, 0 FAIL** (`RESULT: pass=120 fail=0`, suite
 exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Validation matrix
@@ -46,7 +46,7 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | QNX 8 target compiled | Actual compiler and binary | Not attempted without SDP | BLOCKED (`NOT_RUN`) |
 | QNX QEMU runtime | Actual execution evidence | Not attempted | NOT_RUN |
 | README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
-| Security tests | Passed/failed counts | Hostile cases above are part of the 108-check suite | DONE (`VERIFIED_HOST_ONLY`) |
+| Security tests | Passed/failed counts | Hostile cases above are part of the 120-check suite | DONE (`VERIFIED_HOST_ONLY`) |
 | Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
 | Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 (+RT-02 follow-up) in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
 | Host-vs-target test records | Every test record carries runtime=host\|target, enforced | Required key, invalid/missing token -> exit 2 `BUNDLE_INVALID`; collector always writes `host` (no real QNX execution path yet) | DONE (`VERIFIED_HOST_ONLY`) |
@@ -56,11 +56,11 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | Red Team Round 2 | Findings on Level 4 additions fixed and re-tested | RT2-01 (doc fix) and RT2-04 (`signature_status`/`signer_trust_status` default to `NOT_CHECKED`, not `NOT_PRESENT`, when an earlier check exits first) in suite; report in `docs/security/RED-TEAM-ROUND-2.md` | DONE (`VERIFIED_HOST_ONLY`) |
 | Command timeout enforcement | Killed, not left running; evidence preserved | `sleep 30` under `--timeout-sec 1` killed within seconds, recorded `signaled=1`/`signal=9`, bundle verifies -- closes an item carried since Level 1 | DONE (`VERIFIED_HOST_ONLY`) |
 | Parser fuzzing (manifest tokenizer + JSON report parser) | No crash against seed corpus + bounded mutation | `fuzz/fuzz_manifest.c`, `fuzz/fuzz_json_report.c`; CI `fuzz-smoke` job runs both for 30s/target on every push (`clang` unavailable in this dev sandbox -- verified locally via a stub harness instead, documented honestly in `docs/security/FUZZING.md`) | DONE (`VERIFIED_HOST_ONLY`; CI is the only environment that runs the real libFuzzer binaries) |
-| Resource budgets | Every size/count/depth cap enumerated with its test coverage | `docs/security/RESOURCE-LIMITS.md` -- consolidation only, no new limits; several caps still lack a dedicated regression (named honestly in that doc's Recommendations) | PARTIAL (documented; some budget-boundary cases still untested, see that doc) |
+| Resource budgets | Every size/count/depth cap enumerated with its test coverage, and now a dedicated regression per cap | `docs/security/RESOURCE-LIMITS.md`; `tests/run_tests.sh` "resource budget boundaries" (oversized manifest, line count, artifact/test/expected_test counts, argv_count) plus the JSON string-length case in the Level 4 section -- consolidation only, no new limits added | DONE (`VERIFIED_HOST_ONLY`) |
 
 ## Test accounting
 
-- Actually run: 108 host checks (unit-via-CLI, integration, adversarial;
+- Actually run: 120 host checks (unit-via-CLI, integration, adversarial;
   Level 3 signing/trust, Level 5 comparison, Red Team Round 1 regressions
   RT-01..RT-06 plus the RT-02 follow-up, Red Team Round 2 regressions
   (RT2-04), Level 4 host-only test-evidence checks, the timeout regression
