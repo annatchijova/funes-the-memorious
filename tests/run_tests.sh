@@ -483,6 +483,18 @@ printf '{"passed":true,"cases":[{"name":"%s","passed":true}]}' "$LONGNAME" >"$TM
 mkjsoncase longstr "$TMP/l4j_longstr.json" 1
 grep -q "test_count=0" "$TMP/l4j_longstr/manifest.txt"; ok $? "rejected long-string report wrote nothing to the bundle"
 
+# Regression for a real heap-use-after-free found by the libFuzzer
+# harness's first real CI run (ASan abort inside json_test_report_parse's
+# "unknown top-level key" branch, which read a pointer into root's own
+# tree after root had already been freed). Reproduced through the real
+# funes binary pre-fix: printed "unknown top-level key K<garbage>" instead
+# of "unknown top-level key foo" -- corrupted output, not a crash, because
+# this build has no AddressSanitizer; the CI fuzz target did crash. Fixed
+# by formatting the error message before freeing, not after.
+printf '{"foo":1}' >"$TMP/l4j_uaf.json"
+mkjsoncase uaf "$TMP/l4j_uaf.json" 1
+grep -q "unknown top-level key foo" "$TMP/l4jlog_uaf.log"; ok $? "unknown-key error message is clean, not corrupted (regression for a real heap-use-after-free)"
+
 echo "== red team round 2 follow-up: signature status on an unreached check =="
 cp -r "$TMP/bs" "$TMP/bs_unreachedsig"
 printf 'evil' >"$TMP/bs_unreachedsig/blobs/sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

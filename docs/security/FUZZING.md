@@ -59,6 +59,26 @@ Both binaries are built with `-fsanitize=fuzzer,address`, so a crash, a
 hang, or a leak during a real run aborts with a stack trace and a minimized
 repro input written to disk — standard libFuzzer behavior.
 
+## Findings
+
+**A real crash, found by this harness's first real CI run.** The dev
+sandbox that built this harness had no `clang`, so the harness was only
+verified locally via a stub (no ASan). The first time `fuzz-smoke` ran for
+real in GitHub Actions, it found a genuine heap-use-after-free in
+`json_test_report_parse()`'s "unknown top-level key" branch within seconds:
+`jval_free(root)` ran before a `snprintf(..., "%s", key)` that read `key`
+— a pointer into `root`'s own tree, not a copy — freeing it out from under
+the format string. Reproducible through the real `funes import-test
+--format json` binary (not just the fuzz harness) with any report
+containing an unrecognized top-level key, e.g. `{"foo":1}`; without ASan
+it doesn't crash, it silently prints a corrupted key name instead of the
+real one. CONFIRMED BY INDUCTION, not hypothetical — this is exactly the
+scenario this harness exists to catch, and it caught a real one on its
+first real run. Fixed by formatting the message before freeing, not after
+(`src/json_min.c`); regression test and corpus seed
+(`fuzz/corpus/json/unknown_key_uaf_regression.json`) added so neither the
+fuzzer nor the ordinary suite can regress it silently.
+
 ## What the CI job actually proves — and does not
 
 `.github/workflows/ci.yml`'s `fuzz-smoke` job runs each target for a
