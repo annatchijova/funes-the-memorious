@@ -31,8 +31,8 @@ When those questions cannot be answered from artifacts alone, trust depends on t
 
 Funes is a pair of programs with a deliberately narrow contract:
 
-1. **A host collector** (`funes`, planned) runs on Linux. It executes build and test commands under observation, records exit statuses and bounded output, hashes source and output artifacts, and seals the result into a versioned evidence bundle.
-2. **An independent verifier** (`funes-verify`, planned) runs offline, read-only, with no dependency on the collector's internal logic. It re-checks the bundle's structure and hashes and reports exactly what holds and what does not.
+1. **A host collector** (`funes`) runs on Linux. It executes build and test commands under observation, records exit statuses and bounded output, hashes source and output artifacts, and seals the result into a versioned evidence bundle.
+2. **An independent verifier** (`funes-verify`) runs offline, read-only, with no dependency on the collector's internal logic. It re-checks the bundle's structure and hashes and reports exactly what holds and what does not.
 
 Between them sits a public bundle format that another engineer can implement a checker for without using Funes at all. The format — not the collector — is the shared contract.
 
@@ -40,20 +40,27 @@ A useful way to picture it: the collector is a witness that writes down what it 
 
 ## What you can observe
 
-The intended reviewer workflow, once Level 1 lands, is observable end to end:
+The reviewer workflow is observable end to end on a Linux host:
 
 ```text
-$ funes doctor                       # inspect host + QNX toolchain (planned)
-$ funes build -- <build command>     # run build under observation (planned)
-$ funes test  -- <test command>      # run tests under observation (planned)
-$ funes seal --out evidence.funes/   # seal bundle (planned)
-$ funes-verify evidence.funes/       # independent offline check (planned)
-$ funes-verify --json evidence.funes/
+$ funes doctor                       # inspect host + QNX toolchain
+$ funes capture --out BUNDLE --source SRC --artifact OUT:target-executable -- BUILD_CMD...
+$ funes add-test --bundle BUNDLE --artifact-sha256 HEX -- TEST_CMD...
+$ funes-verify BUNDLE                # independent offline check
+$ funes-verify --json BUNDLE
 ```
 
-A successful run ends with a bundle directory. Changing one byte in a recorded artifact and re-running `funes-verify` ends with a non-zero exit and a diagnostic naming the exact artifact and digest that diverged. That mutation exercise — not a green checkmark — is the core demonstration.
+(`capture` and `add-test` seal the bundle as their final step; there is no
+separate seal command.) A successful run ends with a bundle directory.
+Changing one byte in a recorded artifact and re-running `funes-verify` ends
+with exit 3 and a diagnostic naming the exact artifact and digest that
+diverged. That mutation exercise — not a green checkmark — is the core
+demonstration. Step-by-step: [docs/DEMO.md](docs/DEMO.md).
 
-**Current status:** none of the commands above exist yet. This repository is at Level 0 (foundations). The commands are shown to define the contract, not to claim working software. See [What exists today](#what-exists-today) and [docs/STATUS.md](docs/STATUS.md) once it is added.
+**Current status:** Levels 0 and 1 are implemented and tested on the Linux
+host (`VERIFIED_HOST_ONLY`, 41-check suite; see [docs/STATUS.md](docs/STATUS.md)).
+QNX integration (Level 2) is `BLOCKED`: no QNX SDP is installed on the
+development host, and no QNX result is claimed.
 
 ### How this differs from the typical approach
 
@@ -118,10 +125,10 @@ Deep design — canonical serialization, hashing rules, trust boundaries, threat
 
 | Capability claimed | Evidence in this commit | What it licenses you to conclude |
 |---|---|---|
-| Repository foundations | This README, [docs/ROADMAP.md](docs/ROADMAP.md), [docs/engineering/SKILLS-APPLIED.md](docs/engineering/SKILLS-APPLIED.md), `.gitignore`, `LICENSE` | The project's scope, invariants, and level plan are written down and reviewable. Nothing about working software. |
-| Language decision | Owner directive: C. Rationale in [docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md](docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md) (planned, Level 0) | The stack is chosen. No code exists to evaluate yet. |
-| Collector / verifier / bundle | Not implemented | No build, test, seal, or verify claim can be made. |
-| QNX integration | Not implemented; SDP not present on the development host at founding | No QNX execution claim can be made. Status: `NOT_RUN`. |
+| Repository foundations | This README, [docs/ROADMAP.md](docs/ROADMAP.md), [docs/engineering/SKILLS-APPLIED.md](docs/engineering/SKILLS-APPLIED.md), `.gitignore`, `LICENSE` | The project's scope, invariants, and level plan are written down and reviewable. |
+| Language decision | Owner directive: C, recorded with alternatives and revisit triggers in [docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md](docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md) | The stack is chosen and the bundle format is language-neutral, so the decision stays reversible. |
+| Collector / verifier / bundle | `make` builds `bin/funes` and `bin/funes-verify` in C; `make test` runs the 41-check host suite; [docs/STATUS.md](docs/STATUS.md) records observed outcomes | Host build/test capture, sealing, tamper detection, and independent verification work on Linux. Nothing about QNX execution follows from this. |
+| QNX integration | Fixture source and setup procedure exist ([docs/QNX-SETUP.md](docs/QNX-SETUP.md)); `funes doctor` reports `NOT_FOUND` on this host | No QNX execution claim can be made. Status: `BLOCKED` / `NOT_RUN`. |
 
 Live status is maintained in [docs/ROADMAP.md](docs/ROADMAP.md) and, from Level 1 onward, in `docs/STATUS.md` generated from real runs. This README will be updated in the same commit as any status change, never ahead of it.
 
@@ -131,8 +138,8 @@ Full entry/exit criteria, deliverables, threats, and tests per level: [docs/ROAD
 
 | Level | Name | Status |
 |---|---|---|
-| 0 | Foundations and invariants | PARTIAL — docs and repo hygiene in this commit; ADR, schema spec, CI pending |
-| 1 | Real host capture and independent verification | NOT_STARTED |
+| 0 | Foundations and invariants | DONE |
+| 1 | Real host capture and independent verification | DONE (`VERIFIED_HOST_ONLY`) |
 | 2 | Genuine QNX SDP 8.0 build integration | BLOCKED — QNX SDP 8.0 not installed on the dev host |
 | 3 | Authenticated provenance and trust policies | NOT_STARTED |
 | 4 | Test evidence and QNX runtime | NOT_STARTED |
@@ -171,21 +178,26 @@ These invariants govern every later level. They are design constraints, not resu
 
 - **Development host:** Linux (owner develops on Linux Mint). The collector and verifier are C programs built with a host C compiler (`gcc` or `clang`) and `make`.
 - **Language:** C (C11 or later). Both binaries are C so the verifier can be small, auditable, and free of a language runtime dependency. The QNX demonstration fixture is also C, compiled with the QNX toolchain when available.
-- **QNX (for QNX-specific levels):** QNX SDP 8.0 installed and licensed by the user, with `QNX_HOST` / `QNX_TARGET` configured. Funes never installs the SDP, accepts its license, or redistributes its content. See [docs/QNX-SETUP.md](docs/QNX-SETUP.md) (planned).
+- **QNX (for QNX-specific levels):** QNX SDP 8.0 installed and licensed by the user, with `QNX_HOST` / `QNX_TARGET` configured. Funes never installs the SDP, accepts its license, or redistributes its content. See [docs/QNX-SETUP.md](docs/QNX-SETUP.md).
 - **Optional:** QEMU for QNX runtime evidence (Level 4), only when genuinely available.
 
 Cryptography, when it lands in Level 3, will use established primitives (SHA-256; Ed25519 if signing is implemented) from maintained libraries or the platform — never custom algorithms.
 
 ## Try it
 
-There is no binary to try yet. The only commands that have actually been run against this repository are its creation:
+Executed as written on the development host (`VERIFIED_HOST_ONLY`):
 
 ```bash
 git clone https://github.com/annatchijova/funes-the-memorious.git
 cd funes-the-memorious
+make
+make test
+./bin/funes doctor
 ```
 
-From Level 1 onward this section will contain exact quick-start commands that were executed as written, with observed output linked from `docs/STATUS.md`. Until then, any command shown elsewhere in this README is labeled planned and must not be treated as tested.
+For the full build → test → verify → mutate walkthrough, follow
+[docs/DEMO.md](docs/DEMO.md). Observed outcomes are recorded in
+[docs/STATUS.md](docs/STATUS.md).
 
 ### Host-only vs. QNX evidence
 
@@ -240,9 +252,9 @@ The verifier fails closed. Distinct outcomes are never collapsed into one score:
 
 - `capture_status`, `integrity_status`, `signature_status`, `signer_trust_status`, `qnx_toolchain_status`, `test_observation_status`, `artifact_status`, `limitations`.
 
-Conceptual error categories include `BUNDLE_INVALID`, `UNSUPPORTED_SCHEMA`, `MISSING_ARTIFACT`, `DIGEST_MISMATCH`, `SIGNATURE_INVALID`, `SIGNER_UNTRUSTED`, `TOOLCHAIN_MISSING`, `QNX_TARGET_UNAVAILABLE`, `COMMAND_FAILED`, `TEST_FAILED`, `INCOMPLETE_CAPTURE`, `IMPORTED_EVIDENCE`, and `RESOURCE_LIMIT_EXCEEDED`. Exact names, exit codes, and JSON diagnostics are specified in `docs/spec/VERIFIER-SEMANTICS.md` (planned, Level 1) and implemented by the independent verifier. Full semantics: [Technical README](docs/architecture/ARCHITECTURE.md).
+Implemented v1 error categories: `BUNDLE_INVALID` (2), `DIGEST_MISMATCH` (3), `MISSING_ARTIFACT` (4), `UNSUPPORTED_SCHEMA` (5), `RESOURCE_LIMIT_EXCEEDED` (6), and `SEAL_MISMATCH` (7); exit 0 is `INTEGRITY_VALID` and exit 1 is reserved for tool errors. Signature-related categories (`SIGNATURE_INVALID`, `SIGNER_UNTRUSTED`) arrive with Level 3. Exact names, exit codes, and JSON diagnostics are specified in [docs/spec/VERIFIER-SEMANTICS.md](docs/spec/VERIFIER-SEMANTICS.md) and implemented by the independent verifier. Full semantics: [Technical README](docs/architecture/ARCHITECTURE.md).
 
-Security model, assets, adversaries, and trust boundaries are specified in `docs/security/THREAT-MODEL.md` (planned, Level 0/6). In short: hashes alone give integrity against a supplied manifest, not authenticated origin; signatures, when implemented, require an explicitly trusted public key supplied by the verifier; and a software-only collector on an untrusted host cannot prove the host was honest.
+Security model, assets, adversaries, and trust boundaries are specified in [docs/security/THREAT-MODEL.md](docs/security/THREAT-MODEL.md). In short: hashes alone give integrity against a supplied manifest, not authenticated origin; signatures, when implemented, require an explicitly trusted public key supplied by the verifier; and a software-only collector on an untrusted host cannot prove the host was honest.
 
 ## Repository layout
 
@@ -257,26 +269,26 @@ funes-the-memorious/
 │   ├── spec/                  # evidence bundle and verifier semantics specs
 │   ├── security/              # threat model
 │   └── engineering/           # skills applied, status, demo and setup guides
-├── src/                       # (Level 1) collector and shared public format code
-├── cmd/                       # (Level 1) funes and funes-verify entry points, if layout requires
-├── tests/                     # (Level 1) unit, integration and adversarial tests
-└── examples/
-    └── qnx8-hello/            # (Level 2) original C fixture for QNX builds
+├── src/                       # collector (funes) and its SHA-256
+├── verifier/                  # independent verifier (funes-verify), own SHA-256/parser
+├── tests/                     # host unit/integration/adversarial suite
+├── examples/
+│   ├── host-hello/            # host fixture for Level 1 exercises
+│   └── qnx8-hello/            # original C fixture for QNX builds (Level 2)
+├── .github/workflows/         # host-only CI
+├── Makefile
+└── bin/                       # built binaries (gitignored)
 ```
-
-Directories marked with a level do not exist yet and will be created by the commit that implements them — not scaffolded empty in advance.
 
 ## Development
 
-Once code lands (Level 1), the expected workflow is:
-
 ```bash
-make            # build collector and verifier (planned)
-make test       # unit + integration + adversarial tests (planned)
-make fuzz       # fuzz targets where the toolchain supports them (planned, Level 6)
+make            # build bin/funes and bin/funes-verify (-Wall -Wextra -Werror)
+make test       # 41-check host suite: integration + adversarial cases
+make clean
 ```
 
-Tests must be falsifiable: failing builds, failing tests, missing evidence, tampered artifacts, path traversal, symlink escapes, duplicate entries, malformed input, and untrusted signers are first-class cases, and a test that has never been seen red does not count as evidence. CI, when added, runs host-only; QNX steps run only where the SDP is legally available.
+Tests are falsifiable: failing builds, failing tests, missing evidence, tampered artifacts and logs, seal/schema failures, symlink escapes, unexpected material, truncation, secret-leak and determinism checks are first-class cases, and a test that has never been seen red does not count as evidence. CI (`.github/workflows/ci.yml`) runs host-only; QNX steps run only where the SDP is legally available. Fuzzing is Level 6.
 
 ## Limitations and verified-environment matrix
 
@@ -284,12 +296,12 @@ Scoped to what is true today:
 
 | Capability | Expected observation | State |
 |---|---|---|
-| Linux host collector | Real command captured with exit status and output | NOT_STARTED |
-| Build artifact digest | SHA-256 over actual artifact bytes | NOT_STARTED |
-| Independent verifier | Separate C binary, no collector internal imports | NOT_STARTED |
-| Artifact / log mutation | Non-zero verification failure with specific diagnostic | NOT_STARTED |
-| Missing evidence | Exact diagnostic, fail closed | NOT_STARTED |
-| Unknown signer | Reported untrusted, never authenticated | NOT_STARTED |
+| Linux host collector | Real command captured with exit status and output | DONE (`VERIFIED_HOST_ONLY`) |
+| Build artifact digest | SHA-256 over actual artifact bytes | DONE (`VERIFIED_HOST_ONLY`) |
+| Independent verifier | Separate C binary, no collector internal imports | DONE (`VERIFIED_HOST_ONLY`) |
+| Artifact / log mutation | Non-zero verification failure with specific diagnostic | DONE (`VERIFIED_HOST_ONLY`) |
+| Missing evidence | Exact diagnostic, fail closed | DONE (`VERIFIED_HOST_ONLY`) |
+| Unknown signer | Reported untrusted, never authenticated | No signatures in v1 (`NOT_PRESENT`); Level 3 |
 | QNX `qcc` detection | Real tool and environment output | BLOCKED — SDP absent |
 | QNX 8 target compilation | Real `qcc` log and target binary | BLOCKED — SDP absent |
 | QNX QEMU runtime | Real target execution output | NOT_RUN |

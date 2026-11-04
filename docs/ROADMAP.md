@@ -13,8 +13,8 @@ Live status summary:
 
 | Level | Name | Status |
 |---|---|---|
-| 0 | Foundations and Invariants | PARTIAL |
-| 1 | Real Host Capture and Independent Verification | NOT_STARTED |
+| 0 | Foundations and Invariants | DONE |
+| 1 | Real Host Capture and Independent Verification | DONE (VERIFIED_HOST_ONLY) |
 | 2 | Genuine QNX SDP 8.0 Build Integration | BLOCKED |
 | 3 | Authenticated Provenance and Trust Policies | NOT_STARTED |
 | 4 | Test Evidence and QNX Runtime | NOT_STARTED |
@@ -84,11 +84,13 @@ repository remote identified (`annatchijova/funes-the-memorious`).
 **Observable demo.** Reading the README and this file; no executable demo
 is claimed at this level.
 
-**Status: PARTIAL.** Evidence: founding commit contains `README.md`,
-`README_ES.md`, `docs/ROADMAP.md`, `docs/engineering/SKILLS-APPLIED.md`,
-`docs/architecture/ARCHITECTURE.md`, `.gitignore`, `LICENSE`. ADR-001,
-evidence-bundle spec, threat model, and CI remain open, so the exit
-criteria are not met.
+**Status: DONE.** Evidence: founding commit (`README.md`, `README_ES.md`,
+roadmap, skills record, `.gitignore`, `LICENSE`) plus this level's closure —
+`docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md`,
+`docs/spec/EVIDENCE-BUNDLE-v1.md`, `docs/spec/VERIFIER-SEMANTICS.md`,
+`docs/security/THREAT-MODEL.md`, `docs/QNX-SETUP.md`, and host-only CI in
+`.github/workflows/ci.yml`. README invariants and the specs agree; CI runs
+the same `make` / `make test` verified locally (see `docs/STATUS.md`).
 
 **Non-goals.** Any collector, verifier, or QNX behavior. Any screenshot,
 badge, or performance number.
@@ -153,9 +155,20 @@ under observation; the bundle verifies independently; a one-byte mutation
 produces a non-zero, artifact-specific failure. All without any QNX SDK.
 
 **Observable demo.** Host-only scenario, labeled `VERIFIED_HOST_ONLY`:
-build fixture → test → seal → verify → mutate → verify fails.
+build fixture → test → seal → verify → mutate → verify fails. Scripted in
+`docs/DEMO.md` and executed verbatim on the development host.
 
-**Status: NOT_STARTED.**
+**Status: DONE (`VERIFIED_HOST_ONLY`).** Evidence: `make test` reports
+`pass=41 fail=0` (see `docs/STATUS.md`), covering real gcc capture, observed
+passing/failing tests, failing build, artifact/stdout/manifest tampering,
+missing/unexpected/symlink material, resealed unsupported schema, imported
+reports staying `IMPORTED_ONLY`, secret absence, truncation flags, digest
+determinism, and verifier execution under an empty environment. Golden
+vectors are produced by mutating a real captured bundle inside the suite
+rather than shipped as static files; the `abc` SHA-256 vector anchors the
+hash path. One scope note against the test list above: timeout behavior is
+implemented (`--timeout-sec`, SIGKILL) but has no dedicated suite check yet;
+it is carried as a Level 6 hardening item, not silently counted as covered.
 
 **Non-goals.** QNX execution of any kind; signatures; UI.
 

@@ -34,12 +34,12 @@ Entre ambos hay un formato publico de paquete que otro ingeniero puede verificar
 
 ## Estado actual
 
-**Todavia no existe ningun comando de Funes.** Este repositorio esta en el Nivel 0 (fundaciones): documentacion, plan por niveles e higiene de repositorio. Los comandos que se muestran en el README en ingles definen el contrato; no afirman que haya software funcionando. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
+Los Niveles 0 y 1 estan implementados y probados en el host Linux (`make`, `make test` con 41 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Nivel | Nombre | Estado |
 |---|---|---|
-| 0 | Fundaciones e invariantes | PARTIAL |
-| 1 | Captura real en host y verificacion independiente | NOT_STARTED |
+| 0 | Fundaciones e invariantes | DONE |
+| 1 | Captura real en host y verificacion independiente | DONE (VERIFIED_HOST_ONLY) |
 | 2 | Integracion genuina con QNX SDP 8.0 | BLOCKED — SDP no instalado en el host de desarrollo |
 | 3 | Procedencia autenticada y politicas de confianza | NOT_STARTED |
 | 4 | Evidencia de pruebas y runtime QNX | NOT_STARTED |

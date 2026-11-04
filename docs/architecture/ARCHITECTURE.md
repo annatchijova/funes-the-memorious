@@ -1,8 +1,9 @@
 # Technical README — Architecture
 
-Status: Level 0 foundation. This document describes the intended architecture
-and its invariants. It does not claim implemented behavior. Implemented state
-is tracked in `docs/ROADMAP.md` and, from Level 1, in `docs/STATUS.md`.
+Status: Levels 0-1 implemented on the Linux host; QNX parts remain design
+until Level 2. Implemented state is tracked in `docs/ROADMAP.md` and
+`docs/STATUS.md`; where this document and observed status disagree, the
+observed status wins.
 
 Language of this document: English.
 
@@ -26,7 +27,7 @@ contract; the collector is replaceable, the verifier must not have to trust it.
 
 ## Why C
 
-See `ADR-001-LANGUAGE-AND-TARGETS.md` (planned). Summary of the decision
+See `ADR-001-LANGUAGE-AND-TARGETS.md`. Summary of the decision
 recorded there: the owner directed C; independently, C fits because (a) the
 verifier should be a small, auditable binary with no language-runtime
 dependency, (b) the QNX fixture and any future on-target-adjacent code share

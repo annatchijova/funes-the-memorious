@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build collector and verifier
+        run: make clean && make
+      - name: Run host test suite
+        run: make test
+      - name: Check formatting of docs links
+        run: |
+          test -f README.md
+          test -f docs/ROADMAP.md
+          test -f docs/spec/EVIDENCE-BUNDLE-v1.md
