@@ -387,6 +387,16 @@ awk 'BEGIN{s="{\"passed\":true,\"cases\":[";for(i=0;i<40000;i++){if(i)s=s",";s=s
 [ "$(wc -c <"$TMP/l4j_huge.json")" -gt 1048576 ]; ok $? "oversized report fixture exceeds 1 MiB cap"
 mkjsoncase huge "$TMP/l4j_huge.json" 1
 
+echo "== red team round 2 follow-up: signature status on an unreached check =="
+cp -r "$TMP/bs" "$TMP/bs_unreachedsig"
+printf 'evil' >"$TMP/bs_unreachedsig/blobs/sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+$VERIFY --trusted-key "$TMP/pub1.txt" "$TMP/bs_unreachedsig" >"$TMP/vrt2_04.txt" 2>&1
+expect_exit 2 $? "RT2-04 follow-up: tampered signed bundle still fails BUNDLE_INVALID first"
+grep -q "signature_status=NOT_CHECKED" "$TMP/vrt2_04.txt"; ok $? "RT2-04 follow-up: unreached signature phase reports NOT_CHECKED, not NOT_PRESENT"
+grep -q "signer_trust_status=NOT_CHECKED" "$TMP/vrt2_04.txt"; ok $? "RT2-04 follow-up: unreached trust phase reports NOT_CHECKED, not NOT_APPLICABLE"
+$VERIFY "$TMP/bfail" >"$TMP/vrt2_04b.txt" 2>&1
+grep -q "signature_status=NOT_PRESENT" "$TMP/vrt2_04b.txt"; ok $? "RT2-04 follow-up: genuinely unsigned bundle still reports NOT_PRESENT"
+
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"
 [ "$FAIL" -eq 0 ]

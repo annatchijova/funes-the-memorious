@@ -30,8 +30,15 @@ static int g_json = 0;
 static char g_detail[1024] = "";
 static const char *g_code = "";
 static int g_exit = 0;
-static char g_sig[64] = "NOT_PRESENT";
-static char g_trust[64] = "NOT_APPLICABLE";
+/* Default to NOT_CHECKED, not NOT_PRESENT/NOT_APPLICABLE: these globals hold
+ * their default value whenever an earlier check exits before the signature
+ * phase below ever runs, and "not present" would misreport a bundle that
+ * actually carries a valid signature the verifier simply never got to
+ * (Red Team Round 2, RT2-04). The signature phase sets the genuine
+ * NOT_PRESENT/NOT_APPLICABLE pair itself, explicitly, only when it actually
+ * runs and finds no signatures/ directory. */
+static char g_sig[64] = "NOT_CHECKED";
+static char g_trust[64] = "NOT_CHECKED";
 static char g_fp[65] = "";
 
 static void *xmalloc(size_t n) {
@@ -769,6 +776,11 @@ int main(int argc, char **argv) {
                 snprintf(g_detail, sizeof(g_detail),
                          "signature valid under bundle signer key; no trusted key supplied, so origin is not authenticated");
             }
+        } else {
+            /* Signature phase genuinely ran and found neither file: this is
+             * the one place NOT_PRESENT/NOT_APPLICABLE are actually earned. */
+            snprintf(g_sig, sizeof(g_sig), "NOT_PRESENT");
+            snprintf(g_trust, sizeof(g_trust), "NOT_APPLICABLE");
         }
     }
     g_code = "";

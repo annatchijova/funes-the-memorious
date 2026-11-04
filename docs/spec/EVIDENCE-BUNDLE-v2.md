@@ -71,6 +71,17 @@ records; the first unmatched name is a hard failure:
 |---|---|---|
 | 10 | `MISSING_EXPECTED_TEST` | A test name declared in `expected_test.<n>` was never observed or imported. Integrity may otherwise be valid; completeness against the declared expectation is not. Reported as a hard failure, not a degraded status field — consistent with this format's fail-closed philosophy. |
 
+**What this check does *not* prove (Red Team Round 2, RT2-01):** the match is
+on `test.<n>.name.hex` alone, independent of `test.<n>.origin`. A declared
+name is satisfied equally by a real `add-test` run (`OBSERVED`) or by a bare
+`import-test --name` call that executed nothing (`IMPORTED`, self-asserted).
+`expect-tests`/`MISSING_EXPECTED_TEST` detects a *missing named record*, not
+a *missing execution* — that second, stronger question is what
+`test.<n>.origin` and `test_observation_status` are for, and this project's
+"fields are never collapsed into one score" rule means a reviewer who needs
+the execution guarantee must check that separate field, not assume the
+omission check already implies it.
+
 ## 4. Structured JSON test-report adapter (optional, additive)
 
 `funes import-test --format json` parses the report file (capped at 1 MiB,

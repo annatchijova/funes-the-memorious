@@ -18,8 +18,8 @@ Human output and `--json` output carry the same fields:
 | Field | Values (v1) |
 |---|---|
 | `integrity_status` | `INTEGRITY_VALID`, `INTEGRITY_INVALID`, `NOT_CHECKED` |
-| `signature_status` | `NOT_PRESENT`, `VALID`, `INVALID`, `UNVERIFIED` (libsodium unavailable) |
-| `signer_trust_status` | `NOT_APPLICABLE` (no signature), `UNTRUSTED_SIGNER`, `TRUSTED_SIGNER` (matches the reviewer-supplied `--trusted-key`) |
+| `signature_status` | `NOT_PRESENT`, `VALID`, `INVALID`, `UNVERIFIED` (libsodium unavailable), `NOT_CHECKED` (an earlier, unrelated check already failed the bundle before the signature phase ran — see below; this is distinct from `NOT_PRESENT`, which means the phase ran and genuinely found no `signatures/` directory) |
+| `signer_trust_status` | `NOT_APPLICABLE` (no signature), `UNTRUSTED_SIGNER`, `TRUSTED_SIGNER` (matches the reviewer-supplied `--trusted-key`), `NOT_CHECKED` (same unreached-phase case as `signature_status` above) |
 | `test_observation_status` | `OBSERVED` if at least one `OBSERVED` test record exists and integrity is valid; `IMPORTED_ONLY` if tests exist but all are `IMPORTED`; `NO_TEST_RECORD` otherwise |
 | `artifact_status` | `ALL_PRESENT`, `MISSING`, `DIGEST_MISMATCH`, `NOT_CHECKED` |
 | `qnx_toolchain_status` | `RECORDED_PRESENT_FLAGS` / `RECORDED_ABSENT_FLAGS` (what the manifest records about `QNX_HOST`/`QNX_TARGET` presence; not a QNX verification) |
@@ -30,6 +30,15 @@ level. A bundle that is internally consistent but contains only an imported
 test report verifies as integrity-valid with
 `test_observation_status=IMPORTED_ONLY`. It must never be described as
 verified execution.
+
+Any hard failure (`BUNDLE_INVALID`, `DIGEST_MISMATCH`, `MISSING_ARTIFACT`,
+`SEAL_MISMATCH`, `UNSUPPORTED_SCHEMA`, `RESOURCE_LIMIT_EXCEEDED`,
+`MISSING_EXPECTED_TEST`) exits before the signature phase runs, so
+`signature_status`/`signer_trust_status` report `NOT_CHECKED` rather than
+`NOT_PRESENT`/`NOT_APPLICABLE` on those paths — a bundle that fails one of
+those checks may still carry a perfectly valid signature the verifier never
+got to; `NOT_PRESENT` is reserved for the case where the phase actually ran
+and found no `signatures/` directory (Red Team Round 2, RT2-04).
 
 ## Error taxonomy and exit codes
 
