@@ -57,8 +57,8 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | Command timeout enforcement | Killed, not left running; evidence preserved | `sleep 30` under `--timeout-sec 1` killed within seconds, recorded `signaled=1`/`signal=9`, bundle verifies -- closes an item carried since Level 1 | DONE (`VERIFIED_HOST_ONLY`) |
 | Parser fuzzing (manifest tokenizer + JSON report parser) | No crash against seed corpus + bounded mutation | `fuzz/fuzz_manifest.c`, `fuzz/fuzz_json_report.c`; CI `fuzz-smoke` job runs both for 30s/target on every push (`clang` unavailable in this dev sandbox -- verified locally via a stub harness instead, documented honestly in `docs/security/FUZZING.md`) | DONE (`VERIFIED_HOST_ONLY`; CI is the only environment that runs the real libFuzzer binaries) |
 | Resource budgets | Every size/count/depth cap enumerated with its test coverage, and now a dedicated regression per cap | `docs/security/RESOURCE-LIMITS.md`; `tests/run_tests.sh` "resource budget boundaries" (oversized manifest, line count, artifact/test/expected_test counts, argv_count) plus the JSON string-length case in the Level 4 section -- consolidation only, no new limits added | DONE (`VERIFIED_HOST_ONLY`) |
-| Static-analysis lint gate | Every real finding fixed, every false positive justified inline | `cppcheck --enable=warning,style --check-level=exhaustive`, CI `lint` job; `die()` marked `__attribute__((noreturn))` (the real fix behind 4 false-positive `doubleFree` reports), several genuine const-correctness fixes, 2 true false positives suppressed with a one-line reason each (grep `cppcheck-suppress`) | DONE (`VERIFIED_HOST_ONLY`; CI job itself not yet observed running in real GitHub Actions, only its exact command verified locally) |
-| Secret scanning | No committed secret, including in history | `gitleaks detect --source . -v` (MIT-licensed CLI, not the commercially-licensed `gitleaks-action` wrapper) run locally against all 11 commits: `no leaks found`; CI `secret-scan` job runs the same on every push | DONE (`VERIFIED_HOST_ONLY` for the local run; CI job not yet observed running) |
+| Static-analysis lint gate | Every real finding fixed, every false positive justified inline | `cppcheck --enable=warning,style --check-level=exhaustive`, CI `lint` job; `die()` marked `__attribute__((noreturn))` (the real fix behind 4 false-positive `doubleFree` reports), several genuine const-correctness fixes, 2 true false positives suppressed with a one-line reason each (grep `cppcheck-suppress`) | DONE (`VERIFIED_HOST_ONLY`; passed for real in GitHub Actions, run `41836288042`) |
+| Secret scanning | No committed secret, including in history | `gitleaks detect --source . -v` (MIT-licensed CLI, not the commercially-licensed `gitleaks-action` wrapper) run locally against all 12 commits: `no leaks found`; CI `secret-scan` job runs the same on every push | DONE (`VERIFIED_HOST_ONLY`; passed for real in GitHub Actions, run `41836288042`) |
 | Packaged release + limitation matrix | Verifiable artifact, checksummed; plain-language limitation statement | `scripts/release.sh` produces `dist/funes-<sha>.tar.gz` + `.SHA256SUMS`; `sha256sum -c` verified `OK` locally; `docs/LIMITATIONS.md` for the reader-facing boundary statement (`docs/STATUS.md`, this file, stays the detailed log) | DONE (`VERIFIED_HOST_ONLY`; creating an actual git tag or GitHub Release is left to the author, by design) |
 
 ## Test accounting
@@ -86,9 +86,10 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
   SHA256SUMS, `sha256sum -c` verified `OK` locally; no git tag or GitHub
   Release has been created (deliberately left to the author).
 - Not run: QEMU (Level 4 target/QNX part). Level 6 is otherwise complete;
-  see `docs/ROADMAP.md`'s Level 6 closure note for the two honest caveats
-  above (gitleaks CLI vs. the commercially-licensed Action wrapper; CI
-  jobs verified locally, not yet observed running in GitHub Actions).
+  all five CI jobs (`host`, `fuzz-smoke`, `lint`, `secret-scan`,
+  `demo-smoke`) passed for real in GitHub Actions, run `41836288042`. See
+  `docs/ROADMAP.md`'s Level 6 closure note for the one remaining honest
+  caveat (gitleaks CLI vs. the commercially-licensed Action wrapper).
 - Failures still open: none in the host suite. One defect was found and
   fixed during Level 1 (duplicate blob key when stdout and stderr are
   identical bytes; see commit message).

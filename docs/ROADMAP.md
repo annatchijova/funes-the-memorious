@@ -480,18 +480,20 @@ creating any git tag or GitHub Release, which stays a deliberate human
 action; and `docs/LIMITATIONS.md`, a short reader-facing statement of
 what a verified bundle does and does not prove.
 
-**Status: DONE**, with two things worth knowing rather than glossing
-over: (1) secret scanning uses the `gitleaks` CLI binary directly rather
-than the `gitleaks/gitleaks-action` wrapper the deliverable might suggest
--- that wrapper carries a separate commercial EULA (see its `action.yml`),
-which is not a licensing commitment to take on silently given this
-project's existing license-cleanliness stance (ADR-001); the underlying
-scanning engine used instead is genuinely MIT-licensed. (2) The three new
-CI jobs (`lint`, `secret-scan`, `demo-smoke`) were verified by running
-their exact commands locally, not yet observed running inside real GitHub
-Actions -- the same caveat `fuzz-smoke` already carried from the previous
-pass (no `clang` in this dev sandbox either). Suite: 122/122, zero
-warnings under `-Werror`.
+**Status: DONE**, with one thing worth knowing rather than glossing over:
+secret scanning uses the `gitleaks` CLI binary directly rather than the
+`gitleaks/gitleaks-action` wrapper the deliverable might suggest -- that
+wrapper carries a separate commercial EULA (see its `action.yml`), which
+is not a licensing commitment to take on silently given this project's
+existing license-cleanliness stance (ADR-001); the underlying scanning
+engine used instead is genuinely MIT-licensed. All five CI jobs (`host`,
+`fuzz-smoke`, `lint`, `secret-scan`, `demo-smoke`) have now passed for
+real in GitHub Actions (run `41836288042`) -- the `fuzz-smoke` job's first
+real run, in the previous pass, found an actual heap-use-after-free bug
+within seconds; this pass's three new jobs (`lint`, `secret-scan`,
+`demo-smoke`) found nothing further, confirming the local verification
+held up under the real environment too, not just assumed to. Suite:
+122/122, zero warnings under `-Werror`.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 
