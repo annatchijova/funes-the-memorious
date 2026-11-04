@@ -8,6 +8,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -17,6 +18,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <dlfcn.h>
 
 #define MAX_MANIFEST_BYTES (1024u * 1024u)
@@ -338,8 +340,8 @@ int main(int argc, char **argv) {
         if (lstat(mpath, &lst) != 0) FAIL("BUNDLE_INVALID", 2, "manifest.txt missing in bundle %s", bundle);
         if (S_ISLNK(lst.st_mode) || !S_ISREG(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "manifest.txt must be a regular file, not a symlink");
         if (lstat(spath, &lst) == 0 && (S_ISLNK(lst.st_mode) || !S_ISREG(lst.st_mode))) FAIL("BUNDLE_INVALID", 2, "SEAL.txt must be a regular file, not a symlink");
-        if (lstat(bpath, &lst) == 0 && S_ISLNK(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blobs must not be a symlink");
-        if (lstat(bspath, &lst) == 0 && S_ISLNK(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blobs/sha256 must not be a symlink");
+        if (lstat(bpath, &lst) == 0 && (S_ISLNK(lst.st_mode) || !S_ISDIR(lst.st_mode))) FAIL("BUNDLE_INVALID", 2, "blobs must be a real directory, not a symlink or other object");
+        if (lstat(bspath, &lst) == 0 && (S_ISLNK(lst.st_mode) || !S_ISDIR(lst.st_mode))) FAIL("BUNDLE_INVALID", 2, "blobs/sha256 must be a real directory, not a symlink or other object");
     }
     if (stat(mpath, &st) != 0) FAIL("BUNDLE_INVALID", 2, "manifest.txt missing in bundle %s", bundle);
     if ((unsigned long long)st.st_size > MAX_MANIFEST_BYTES)
@@ -495,9 +497,20 @@ int main(int argc, char **argv) {
         snprintf(bk, sizeof(bk), "blob.%s", art_digests[i]);
         if (!has_key(bk)) FAIL("BUNDLE_INVALID", 2, "artifact %llu blob not referenced", i);
     }
-    /* Unexpected files in the blob directory fail closed. */
-    DIR *d = opendir(bdir);
-    if (!d) FAIL("BUNDLE_INVALID", 2, "blob directory unreadable");
+    /* Unexpected files in the blob directory fail closed. Opened via
+     * O_DIRECTORY|O_NOFOLLOW and fstat-checked on the resulting fd (not a
+     * separate lstat+opendir) so there is no TOCTOU window between "this is
+     * a real directory" and "this is what gets scanned" (round 1, RT-02
+     * follow-up). */
+    int bfd = open(bdir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (bfd < 0) FAIL("BUNDLE_INVALID", 2, "blob directory unreadable or not a directory");
+    struct stat bfst;
+    if (fstat(bfd, &bfst) != 0 || !S_ISDIR(bfst.st_mode)) {
+        close(bfd);
+        FAIL("BUNDLE_INVALID", 2, "blob directory is not a regular directory");
+    }
+    DIR *d = fdopendir(bfd);
+    if (!d) { close(bfd); FAIL("BUNDLE_INVALID", 2, "blob directory unreadable"); }
     struct dirent *de;
     while ((de = readdir(d)) != NULL) {
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
@@ -526,8 +539,20 @@ int main(int argc, char **argv) {
         closedir(rd);
         char sdpath[PATH_MAX];
         snprintf(sdpath, sizeof(sdpath), "%s/signatures", bundle);
-        DIR *sd = opendir(sdpath);
-        if (sd) {
+        /* Same O_NOFOLLOW + fstat(S_ISDIR) + fdopendir atomicity as the blob
+         * directory above: a missing signatures/ is fine (unsigned bundle),
+         * but anything present that is not a real directory (symlink to
+         * outside the bundle, or a plain file) fails closed instead of
+         * being silently followed by opendir(). */
+        int sfd = open(sdpath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+        if (sfd >= 0) {
+            struct stat sfst;
+            if (fstat(sfd, &sfst) != 0 || !S_ISDIR(sfst.st_mode)) {
+                close(sfd);
+                FAIL("BUNDLE_INVALID", 2, "signatures is not a regular directory");
+            }
+            DIR *sd = fdopendir(sfd);
+            if (!sd) { close(sfd); FAIL("BUNDLE_INVALID", 2, "signatures directory unreadable"); }
             struct dirent *se;
             while ((se = readdir(sd)) != NULL) {
                 if (strcmp(se->d_name, ".") == 0 || strcmp(se->d_name, "..") == 0) continue;
@@ -537,6 +562,8 @@ int main(int argc, char **argv) {
                 }
             }
             closedir(sd);
+        } else if (errno != ENOENT) {
+            FAIL("BUNDLE_INVALID", 2, "signatures must be a regular directory, not a symlink or other object");
         }
     }
     /* Test records: origins reported, never promoted; association checked. */

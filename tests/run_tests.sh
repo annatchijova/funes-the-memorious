@@ -290,6 +290,18 @@ cp -r "$TMP/b1" "$TMP/brt6"
 printf 'fake report' >"$TMP/brt6/extra-report.html"
 $VERIFY "$TMP/brt6" >"$TMP/vrt6.txt" 2>&1
 expect_exit 2 $? "RT-06 unexpected bundle-root file rejected"
+mkdir -p "$TMP/brt2b/outside"
+printf 'planted' >"$TMP/brt2b/outside/ed25519.sig"
+cp -r "$TMP/b1" "$TMP/brt2b/bundle"
+rm -rf "$TMP/brt2b/bundle/signatures" 2>/dev/null
+ln -s "$TMP/brt2b/outside" "$TMP/brt2b/bundle/signatures"
+$VERIFY "$TMP/brt2b/bundle" >"$TMP/vrt2b.txt" 2>&1
+expect_exit 2 $? "RT-02 follow-up: symlinked signatures directory rejected"
+cp -r "$TMP/b1" "$TMP/brt2c"
+rm -rf "$TMP/brt2c/signatures" 2>/dev/null
+printf 'not a directory' >"$TMP/brt2c/signatures"
+$VERIFY "$TMP/brt2c" >"$TMP/vrt2c.txt" 2>&1
+expect_exit 2 $? "RT-02 follow-up: non-directory signatures rejected"
 
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"

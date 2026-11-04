@@ -23,7 +23,7 @@ CODE FACT · PLAUSIBLE HYPOTHESIS · CONFIRMED BY INDUCTION · FALSIFIED
 | RT-05 | Medium | CONFIRMED BY INDUCTION | collector | `funes sign` followed a pre-planted `signatures/ed25519.sig` symlink and overwrote its target (sibling sweep of RT-02) |
 | RT-06 | Low | CONFIRMED BY INDUCTION | verifier | Unexpected files at the bundle root / in `signatures/` were ignored (sibling sweep of RT-01) |
 
-All six were fixed in this round and re-induced: RT-01/RT-02/RT-06 now exit 2, RT-03's fake library receives nothing, RT-04 sizes come from `stat` before any streaming, RT-05 signing now refuses the symlink with the target byte-identical. Regression checks RT-01..RT-06 are in the suite. The sibling sweep behind RT-05/RT-06 also moved the `SEAL.txt` write to temp+rename like the manifest.
+All six were fixed in this round and re-induced: RT-01/RT-02/RT-06 now exit 2, RT-03's fake library receives nothing, RT-04 sizes come from `stat` before any streaming, RT-05 signing now refuses the symlink with the target byte-identical. Regression checks RT-01..RT-06 are in the suite. The sibling sweep behind RT-05/RT-06 also moved the `SEAL.txt` write to temp+rename like the manifest. RT-02's fix was independently audited the same day and found partial (`signatures/` directory itself not `lstat`-checked, `S_ISDIR` not enforced); see the RT-02 follow-up note below — closed with an atomic `open+fstat+fdopendir`, two added regression tests, suite now 76/76.
 
 ## Findings
 
@@ -40,6 +40,7 @@ All six were fixed in this round and re-induced: RT-01/RT-02/RT-06 now exit 2, R
 - Expectation violated: evidence must live in the bundle; only individual blobs were `lstat`-checked, while `manifest.txt`, `SEAL.txt` and the blob directories were followed.
 - Induction: a bundle of three symlinks to a good bundle verified exit 0 before the fix; exit 2 after.
 - Fix: `lstat` the manifest, seal, both blob directories, and `signer.txt`; symlinks and non-regular files are `BUNDLE_INVALID` / `SIGNATURE_INVALID`.
+- **Follow-up (found in review of this round, same day):** the initial fix covered individual files and the early `blobs`/`blobs/sha256` symlink check, but left two gaps: (1) the `signatures/` directory itself was never `lstat`-checked, so a symlink to an external directory was followed by a bare `opendir()`; (2) the checks that did exist asserted only `!S_ISLNK`, not `S_ISDIR`, so a non-symlink non-directory object (e.g. a plain file) would still pass the pre-check. Both are now closed by opening `blobs/sha256` and `signatures/` with `open(O_DIRECTORY|O_NOFOLLOW)`, `fstat`-checking `S_ISDIR` on the resulting fd, and only then `fdopendir`-ing that same fd — the type check and the scan use one file descriptor, so there is no TOCTOU window between "confirmed directory" and "what gets listed" (a risk a separate `lstat()` + `opendir()` pair does not close). A missing `signatures/` is still accepted (unsigned bundle); anything present that is not a real directory fails closed. Regression tests added: symlinked `signatures/` and non-directory `signatures/`, both exit 2.
 
 ### RT-03 — Search-path libsodium receives key material
 **Severity:** Medium  **Epistemic level:** CONFIRMED BY INDUCTION  **Bucket:** vulnerability (precondition: attacker influences the signing process environment)
