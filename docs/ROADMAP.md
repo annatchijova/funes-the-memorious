@@ -19,7 +19,7 @@ Live status summary:
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | PARTIAL (host slice DONE, VERIFIED_HOST_ONLY; QEMU/QNX runtime NOT_RUN, blocked by Level 2) |
 | 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
-| 6 | Security, Performance, Portability and Release | PARTIAL (parser fuzzing harness + seed corpus + CI smoke job DONE; resource-budget doc, broader CI, release packaging NOT_STARTED) |
+| 6 | Security, Performance, Portability and Release | PARTIAL (parser fuzzing harness + corpus + CI smoke job, resource-budget doc, timeout and schema v1→v2 regressions DONE; broader CI, release packaging NOT_STARTED) |
 | 7 | Hackathon Jury Experience | NOT_STARTED |
 
 Status vocabulary: `DONE`, `PARTIAL`, `BLOCKED`, `NOT_STARTED`, plus the
@@ -445,14 +445,23 @@ bounded run does and does not prove — it is not a continuous fuzzing
 campaign). The manifest tokenizer was extracted into a pure, non-exiting
 function to make this possible, verified behavior-preserving by diffing
 `tests/run_tests.sh`'s full output byte-for-byte against the pre-refactor
-commit (identical). Still open: resource-budget consolidation into one
-document (the individual `RESOURCE_LIMIT_EXCEEDED` checks already exist
-across Levels 1/4/6 but are not yet enumerated in one place), determinism/
-schema-compatibility regression tests specifically for the v1→v2 boundary
-beyond what Level 4's own tests already cover, broader CI (lint, license
-and secret scanning, README-as-written smoke test), and the packaged
-release with checksums and a limitation matrix. None of the open items are
-started; none are claimed done.
+commit (identical). Also done, in the same pass: every size/count/depth
+limit across both binaries enumerated with its test coverage in
+`docs/security/RESOURCE-LIMITS.md` (consolidation only, no new limits; a
+handful of budget-boundary cases still lack a dedicated regression, named
+honestly in that document rather than implied covered); a dedicated
+schema v1→v2 compatibility regression (a genuinely v1-shaped bundle — no
+`runtime` field, `schema_version=1` — is rejected as `UNSUPPORTED_SCHEMA`
+before the v2-specific required-key checks would otherwise choke on the
+missing field, proving the check *ordering*, not just the version-string
+match); and the dedicated timeout regression carried as an open item since
+Level 1 (a real `sleep 30` under `--timeout-sec 1` is confirmed killed,
+not left running, with evidence preserved). Still open: a few named
+budget-boundary regressions (oversized manifest, line/record-count caps,
+`argv_count`/`expected_test_count` ceilings — see `RESOURCE-LIMITS.md`),
+broader CI (lint, license and secret scanning, README-as-written smoke
+test), and the packaged release with checksums and a limitation matrix.
+None of the remaining open items are started; none are claimed done.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 

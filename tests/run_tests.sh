@@ -71,6 +71,19 @@ grep -q "build.exit_status=1" "$TMP/bfail/manifest.txt"; ok $? "failing build re
 $VERIFY "$TMP/bfail" >"$TMP/vfail.txt" 2>&1
 expect_exit 0 $? "failing-build bundle verifies as evidence"
 
+echo "== timeout enforcement (carried from Level 1, closed in Level 6) =="
+START=$(date +%s)
+$FUNES capture --out "$TMP/btimeout" --timeout-sec 1 -- sleep 30 >"$TMP/captimeout.log" 2>&1
+END=$(date +%s)
+ELAPSED=$((END - START))
+[ "$ELAPSED" -lt 10 ]; ok $? "timed-out command actually killed, not left to run 30s"
+grep -q "build.signaled=1" "$TMP/btimeout/manifest.txt"; ok $? "timeout recorded as signaled"
+grep -q "build.signal=9" "$TMP/btimeout/manifest.txt"; ok $? "timeout recorded as SIGKILL (signal 9)"
+ELAPSED_MS=$(grep "^build.elapsed_ms=" "$TMP/btimeout/manifest.txt" | cut -d= -f2)
+[ -n "$ELAPSED_MS" ] && [ "$ELAPSED_MS" -lt 5000 ]; ok $? "recorded elapsed_ms bounded near the 1s timeout, not the 30s sleep"
+$VERIFY "$TMP/btimeout" >"$TMP/vtimeout.txt" 2>&1
+expect_exit 0 $? "timed-out bundle still verifies as evidence (killed build is preserved, not hidden)"
+
 echo "== tamper: one byte in artifact blob =="
 cp -r "$TMP/b1" "$TMP/b1_tamper_art"
 ABlob="$TMP/b1_tamper_art/blobs/sha256/$ART"
@@ -121,6 +134,22 @@ printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_schema/SEAL.txt"
 $VERIFY "$TMP/b1_schema" >"$TMP/vt7.txt" 2>&1
 expect_exit 5 $? "unsupported schema rejected"
 grep -q "UNSUPPORTED_SCHEMA" "$TMP/vt7.txt"; ok $? "schema failure named UNSUPPORTED_SCHEMA"
+
+echo "== schema v1->v2 compatibility boundary (Level 6) =="
+# A genuinely v1-shaped bundle (no test.<n>.runtime, the Level 4/v2-only
+# required key) must be rejected as UNSUPPORTED_SCHEMA at the header check,
+# before ever reaching the v2-specific required-key validation that would
+# otherwise choke on the missing field with a different, more confusing
+# error (or, worse, not at all). Proves the check ordering, not just the
+# schema_version string match the test above already covers.
+cp -r "$TMP/b1" "$TMP/b1_v1shape"
+sed -i '/^test\.[0-9]*\.runtime=/d' "$TMP/b1_v1shape/manifest.txt"
+sed -i 's/schema_version=2/schema_version=1/' "$TMP/b1_v1shape/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/b1_v1shape/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/b1_v1shape/SEAL.txt"
+$VERIFY "$TMP/b1_v1shape" >"$TMP/vschema1.txt" 2>&1
+expect_exit 5 $? "v1-shaped bundle (schema_version=1, no runtime field) rejected cleanly"
+grep -q "UNSUPPORTED_SCHEMA" "$TMP/vschema1.txt"; ok $? "v1-shaped bundle named UNSUPPORTED_SCHEMA, not a confusing missing-key error"
 
 echo "== imported report stays IMPORTED =="
 $FUNES capture --out "$TMP/b2" --source "$TMP/work/main.c" \
