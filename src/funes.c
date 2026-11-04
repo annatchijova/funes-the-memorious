@@ -22,6 +22,8 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
+#include <dlfcn.h>
+#include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -469,6 +471,164 @@ static bool has_artifact_digest(linelist *l, const char *digest) {
     return false;
 }
 
+/* --- Ed25519 via libsodium, loaded at runtime (no custom primitives). ---
+ * Guarantee provided: authenticity of the manifest commitment under a key.
+ * It does not prove an execution occurred. The algorithm is fixed in code;
+ * bundle metadata never selects it, so there is no downgrade path. */
+typedef int (*sign_seed_keypair_fn)(uint8_t *, uint8_t *, const uint8_t *);
+typedef int (*sign_detached_fn)(uint8_t *, unsigned long long *, const uint8_t *,
+                                unsigned long long, const uint8_t *);
+static sign_seed_keypair_fn g_seed_keypair = NULL;
+static sign_detached_fn g_sign_detached = NULL;
+
+static void load_sodium_sign(void) {
+    if (g_seed_keypair && g_sign_detached) return;
+    void *h = dlopen("libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("libsodium.so", RTLD_NOW | RTLD_LOCAL);
+    if (!h) die("libsodium is unavailable (needed only for keygen/sign); install libsodium or skip signing. Integrity-only bundles remain fully usable");
+    g_seed_keypair = (sign_seed_keypair_fn)dlsym(h, "crypto_sign_seed_keypair");
+    g_sign_detached = (sign_detached_fn)dlsym(h, "crypto_sign_detached");
+    if (!g_seed_keypair || !g_sign_detached) die("libsodium does not expose the Ed25519 signing API");
+}
+
+static void hex_encode_bytes(const uint8_t *in, size_t n, char *out) {
+    static const char H[] = "0123456789abcdef";
+    for (size_t i = 0; i < n; i++) { out[i * 2] = H[in[i] >> 4]; out[i * 2 + 1] = H[in[i] & 0xf]; }
+    out[n * 2] = '\0';
+}
+
+static int hex_decode_bytes(const char *hex, uint8_t *out, size_t want) {
+    if (strlen(hex) != want * 2) return -1;
+    for (size_t i = 0; i < want; i++) {
+        char a = hex[i * 2], b = hex[i * 2 + 1];
+        int va = (a >= '0' && a <= '9') ? a - '0' : (a >= 'a' && a <= 'f') ? a - 'a' + 10 : -1;
+        int vb = (b >= '0' && b <= '9') ? b - '0' : (b >= 'a' && b <= 'f') ? b - 'a' + 10 : -1;
+        if (va < 0 || vb < 0) return -1;
+        out[i] = (uint8_t)(va * 16 + vb);
+    }
+    return 0;
+}
+
+/* Seed file: header line + 64 hex chars. Written 0600, never overwritten. */
+static void read_seed_file(const char *path, uint8_t seed[32], uint8_t pk[32]) {
+    FILE *f = fopen(path, "rb");
+    if (!f) die("cannot open signing key %s: %s", path, strerror(errno));
+    char line1[128] = "", line2[256] = "";
+    if (!fgets(line1, sizeof(line1), f) || !fgets(line2, sizeof(line2), f)) {
+        fclose(f);
+        die("signing key %s is malformed", path);
+    }
+    fclose(f);
+    if (strcmp(line1, "FUNES-ED25519-SEED-1\n") != 0) die("signing key %s has a bad header", path);
+    line2[strcspn(line2, "\r\n")] = '\0';
+    if (hex_decode_bytes(line2, seed, 32) != 0) die("signing key %s does not contain a 32-byte hex seed", path);
+    uint8_t sk[64];
+    load_sodium_sign();
+    if (g_seed_keypair(pk, sk, seed) != 0) die("cannot derive keypair from seed");
+    memset(sk, 0, sizeof(sk));
+}
+
+static void pubkey_fingerprint(const uint8_t pk[32], char out[65]) {
+    hash_bytes(pk, 32, out);
+}
+
+static int cmd_keygen(int argc, char **argv) {
+    const char *out = NULL, *pubout = NULL;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) out = argv[++i];
+        else if (strcmp(argv[i], "--pub-out") == 0 && i + 1 < argc) pubout = argv[++i];
+        else die("keygen: unknown or incomplete option %s", argv[i]);
+    }
+    if (!out || !pubout) die("keygen: --out SEEDFILE --pub-out PUBFILE are required");
+    if (access(out, F_OK) == 0 || access(pubout, F_OK) == 0)
+        die("keygen: refusing to overwrite an existing key file");
+    uint8_t seed[32];
+    ssize_t got = getrandom(seed, sizeof(seed), 0);
+    if (got != (ssize_t)sizeof(seed)) die("getrandom failed: %s", strerror(errno));
+    uint8_t pk[32], sk[64];
+    load_sodium_sign();
+    if (g_seed_keypair(pk, sk, seed) != 0) die("libsodium keypair derivation failed");
+    memset(sk, 0, sizeof(sk));
+    int fd = open(out, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) die("cannot create seed file %s: %s", out, strerror(errno));
+    char seedhex[65];
+    hex_encode_bytes(seed, 32, seedhex);
+    char sbuf[256];
+    int sn = snprintf(sbuf, sizeof(sbuf), "FUNES-ED25519-SEED-1\n%s\n", seedhex);
+    if (write(fd, sbuf, (size_t)sn) != sn) { close(fd); die("cannot write seed file"); }
+    if (close(fd) != 0) die("cannot close seed file: %s", strerror(errno));
+    memset(seed, 0, sizeof(seed));
+    char pkhex[65];
+    hex_encode_bytes(pk, 32, pkhex);
+    FILE *pf = fopen(pubout, "wx");
+    if (!pf) die("cannot create public key file %s: %s", pubout, strerror(errno));
+    fprintf(pf, "%s\n", pkhex);
+    if (fclose(pf) != 0) die("cannot close public key file: %s", strerror(errno));
+    char fp[65];
+    pubkey_fingerprint(pk, fp);
+    printf("signer_pubkey_hex=%s\n", pkhex);
+    printf("signer_fingerprint_sha256=%s\n", fp);
+    printf("warning: seed file %s is unencrypted (mode 0600). Protect it like a password; anyone holding it can sign as this key. It is never copied into a bundle.\n", out);
+    return 0;
+}
+
+static int cmd_sign(int argc, char **argv) {
+    const char *bundle = NULL, *key = NULL;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--bundle") == 0 && i + 1 < argc) bundle = argv[++i];
+        else if (strcmp(argv[i], "--key") == 0 && i + 1 < argc) key = argv[++i];
+        else die("sign: unknown or incomplete option %s", argv[i]);
+    }
+    if (!bundle || !key) die("sign: --bundle DIR --key SEEDFILE are required");
+    uint8_t seed[32], pk[32];
+    read_seed_file(key, seed, pk);
+    char mpath[PATH_MAX];
+    snprintf(mpath, sizeof(mpath), "%s/manifest.txt", bundle);
+    FILE *mf = fopen(mpath, "rb");
+    if (!mf) die("bundle %s has no readable manifest.txt", bundle);
+    strbuf mb;
+    sb_init(&mb);
+    char chunk[8192];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), mf)) > 0) sb_addn(&mb, chunk, n);
+    fclose(mf);
+    char mdigest[65];
+    hash_bytes((const uint8_t *)mb.buf, mb.len, mdigest);
+    free(mb.buf);
+    /* Domain-separated payload: exactly FUNES-SIGN-1\n<manifest sha256 hex>\n */
+    char payload[128];
+    int plen = snprintf(payload, sizeof(payload), "FUNES-SIGN-1\n%s\n", mdigest);
+    uint8_t sk[64];
+    if (g_seed_keypair(pk, sk, seed) != 0) die("cannot derive keypair from seed");
+    memset(seed, 0, sizeof(seed));
+    uint8_t sig[64];
+    unsigned long long siglen = 0;
+    if (g_sign_detached(sig, &siglen, (const uint8_t *)payload, (unsigned long long)plen, sk) != 0 || siglen != 64)
+        die("libsodium signing failed");
+    memset(sk, 0, sizeof(sk));
+    char sdir[PATH_MAX];
+    snprintf(sdir, sizeof(sdir), "%s/signatures", bundle);
+    if (mkdir(sdir, 0755) != 0 && errno != EEXIST) die("cannot create %s: %s", sdir, strerror(errno));
+    char sigpath[PATH_MAX + 64];
+    snprintf(sigpath, sizeof(sigpath), "%s/ed25519.sig", sdir);
+    FILE *sf = fopen(sigpath, "wb");
+    if (!sf) die("cannot write signature: %s", strerror(errno));
+    if (fwrite(sig, 1, 64, sf) != 64) { fclose(sf); die("short write on signature"); }
+    if (fclose(sf) != 0) die("cannot close signature: %s", strerror(errno));
+    char pkhex[65], fp[65];
+    hex_encode_bytes(pk, 32, pkhex);
+    pubkey_fingerprint(pk, fp);
+    char txtpath[PATH_MAX + 64];
+    snprintf(txtpath, sizeof(txtpath), "%s/signer.txt", sdir);
+    FILE *tf = fopen(txtpath, "wb");
+    if (!tf) die("cannot write signer.txt: %s", strerror(errno));
+    fprintf(tf, "algorithm=ed25519\nmanifest_sha256=%s\npayload_domain=FUNES-SIGN-1\nsigner_fingerprint_sha256=%s\nsigner_pubkey_hex=%s\n", mdigest, fp, pkhex);
+    if (fclose(tf) != 0) die("cannot close signer.txt: %s", strerror(errno));
+    printf("signed bundle %s manifest_sha256=%s signer_fingerprint_sha256=%s\n", bundle, mdigest, fp);
+    printf("note: a valid signature proves control of this key, not that any execution occurred.\n");
+    return 0;
+}
+
 static void usage(FILE *out) {
     fprintf(out,
         "funes - host collector for FUNES evidence bundles (format v1)\n"
@@ -479,6 +639,8 @@ static void usage(FILE *out) {
         "  funes add-test --bundle DIR --artifact-sha256 HEX\n"
         "                [--timeout-sec N] [--epoch N] -- CMD [ARGS...]\n"
         "  funes import-test --bundle DIR --artifact-sha256 HEX --report FILE\n"
+        "  funes keygen --out SEEDFILE --pub-out PUBFILE\n"
+        "  funes sign --bundle DIR --key SEEDFILE\n"
         "  funes --help\n"
         "capture/add-test exit status mirrors the executed command; the bundle\n"
         "is sealed even when that command fails. See docs/spec/.\n");
@@ -712,6 +874,8 @@ int main(int argc, char **argv) {
         int json = (argc > 2 && strcmp(argv[2], "--json") == 0);
         return cmd_doctor(json);
     }
+    if (strcmp(argv[1], "keygen") == 0) return cmd_keygen(argc - 2, argv + 2);
+    if (strcmp(argv[1], "sign") == 0) return cmd_sign(argc - 2, argv + 2);
     if (strcmp(argv[1], "capture") == 0) return cmd_capture(argc - 2, argv + 2);
     if (strcmp(argv[1], "add-test") == 0) return cmd_add_test(argc - 2, argv + 2, 0, NULL);
     if (strcmp(argv[1], "import-test") == 0) {

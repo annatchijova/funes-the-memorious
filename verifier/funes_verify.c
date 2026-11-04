@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -16,6 +17,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <dlfcn.h>
 
 #define MAX_MANIFEST_BYTES (1024u * 1024u)
 #define MAX_BLOB_BYTES (64ull * 1024ull * 1024ull)
@@ -26,6 +28,9 @@ static int g_json = 0;
 static char g_detail[1024] = "";
 static const char *g_code = "";
 static int g_exit = 0;
+static char g_sig[64] = "NOT_PRESENT";
+static char g_trust[64] = "NOT_APPLICABLE";
+static char g_fp[65] = "";
 
 static void *xmalloc(size_t n) {
     void *p = malloc(n ? n : 1);
@@ -87,17 +92,20 @@ static bool parse_u64(const char *s, unsigned long long *out) {
 static void report_and_exit(const char *integrity, const char *art,
                             const char *testobs, const char *qnxf) {
     if (g_json) {
-        printf("{\"integrity_status\":\"%s\",\"signature_status\":\"NOT_PRESENT\","
-               "\"signer_trust_status\":\"NOT_APPLICABLE\",\"artifact_status\":\"%s\","
+        printf("{\"integrity_status\":\"%s\",\"signature_status\":\"%s\","
+               "\"signer_trust_status\":\"%s\",\"signer_fingerprint_sha256\":\"%s\","
+               "\"artifact_status\":\"%s\","
                "\"test_observation_status\":\"%s\",\"qnx_toolchain_status\":\"%s\","
                "\"error_code\":\"%s\",\"detail\":\"%s\","
-               "\"limitations\":\"integrity is not authenticity; authenticity would "
-               "not prove execution; validity does not certify software safety\"}\n",
-               integrity, art, testobs, qnxf, g_code, g_detail);
+               "\"limitations\":\"integrity is not authenticity; a valid signature "
+               "proves control of a key, not that an execution occurred; validity "
+               "does not certify software safety\"}\n",
+               integrity, g_sig, g_trust, g_fp, art, testobs, qnxf, g_code, g_detail);
     } else {
         printf("integrity_status=%s\n", integrity);
-        printf("signature_status=NOT_PRESENT\n");
-        printf("signer_trust_status=NOT_APPLICABLE\n");
+        printf("signature_status=%s\n", g_sig);
+        printf("signer_trust_status=%s\n", g_trust);
+        if (g_fp[0]) printf("signer_fingerprint_sha256=%s\n", g_fp);
         printf("artifact_status=%s\n", art);
         printf("test_observation_status=%s\n", testobs);
         printf("qnx_toolchain_status=%s\n", qnxf);
@@ -156,6 +164,66 @@ static int hash_file_stream(const char *path, char out[65], unsigned long long *
 }
 
 static bool starts(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
+
+/* Ed25519 verification via libsodium, loaded at runtime. The algorithm is
+ * fixed here; signer.txt metadata never selects it (no downgrade path). */
+typedef int (*verify_detached_fn)(const uint8_t *, const uint8_t *,
+                                  unsigned long long, const uint8_t *);
+static verify_detached_fn g_verify_detached = NULL;
+static int sodium_verify_available(void) {
+    if (g_verify_detached) return 1;
+    void *h = dlopen("libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("libsodium.so", RTLD_NOW | RTLD_LOCAL);
+    if (!h) return 0;
+    g_verify_detached = (verify_detached_fn)dlsym(h, "crypto_sign_verify_detached");
+    return g_verify_detached != NULL;
+}
+
+static int hex_decode(const char *hex, uint8_t *out, size_t want) {
+    if (!hex || strlen(hex) != want * 2) return -1;
+    for (size_t i = 0; i < want; i++) {
+        char a = hex[i * 2], b = hex[i * 2 + 1];
+        int va = (a >= '0' && a <= '9') ? a - '0' : (a >= 'a' && a <= 'f') ? a - 'a' + 10 : -1;
+        int vb = (b >= '0' && b <= '9') ? b - '0' : (b >= 'a' && b <= 'f') ? b - 'a' + 10 : -1;
+        if (va < 0 || vb < 0) return -1;
+        out[i] = (uint8_t)(va * 16 + vb);
+    }
+    return 0;
+}
+
+/* Read a trusted public-key file: exactly 64 hex chars plus optional LF. */
+static int read_trusted_pubkey(const char *path, uint8_t pk[32]) {
+    size_t len = 0;
+    uint8_t *buf = read_file(path, &len);
+    if (!buf) return -1;
+    while (len && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) len--;
+    buf[len] = '\0';
+    int rc = hex_decode((const char *)buf, pk, 32);
+    free(buf);
+    return rc;
+}
+
+/* Extract key=value from signer.txt content; strict single occurrence. */
+static int signer_get(const char *text, const char *key, char *out, size_t outsz) {
+    size_t klen = strlen(key);
+    int found = 0;
+    const char *p = text;
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t linelen = nl ? (size_t)(nl - p) : strlen(p);
+        if (linelen > klen && strncmp(p, key, klen) == 0 && p[klen] == '=') {
+            if (found) return -1;
+            size_t vlen = linelen - klen - 1;
+            if (vlen >= outsz) return -1;
+            memcpy(out, p + klen + 1, vlen);
+            out[vlen] = '\0';
+            found = 1;
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    return found ? 0 : -1;
+}
 
 /* Indexed key forms: build.argv.<n>.hex, source.file.<n>.*, artifact.<n>.*, test.<n>.* */
 static bool indexed_ok(const char *key, const char *prefix, const char *const *tails, int ntails) {
@@ -224,17 +292,33 @@ static unsigned long long req_u64(const char *k) {
     return out;
 }
 
+/* Signature phase exit helper: integrity already established by callers. */
+static void sig_fail(const char *code, int ex, const char *testobs, const char *qnxf,
+                     const char *fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    g_code = code;
+    g_exit = ex;
+    snprintf(g_detail, sizeof(g_detail), "%s", buf);
+    report_and_exit("INTEGRITY_VALID", "ALL_PRESENT", testobs, qnxf);
+}
+
 int main(int argc, char **argv) {
     const char *bundle = NULL;
+    const char *trusted_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--json") == 0) g_json = 1;
+        else if (strcmp(argv[i], "--trusted-key") == 0 && i + 1 < argc) trusted_path = argv[++i];
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            printf("usage: funes-verify [--json] BUNDLE_DIR\n");
+            printf("usage: funes-verify [--json] [--trusted-key PUBFILE] BUNDLE_DIR\n");
             return 0;
         } else if (!bundle) bundle = argv[i];
         else { fprintf(stderr, "funes-verify: unexpected argument %s\n", argv[i]); return 1; }
     }
-    if (!bundle) { fprintf(stderr, "usage: funes-verify [--json] BUNDLE_DIR\n"); return 1; }
+    if (!bundle) { fprintf(stderr, "usage: funes-verify [--json] [--trusted-key PUBFILE] BUNDLE_DIR\n"); return 1; }
     char mpath[PATH_MAX], spath[PATH_MAX], bdir[PATH_MAX];
     snprintf(mpath, sizeof(mpath), "%s/manifest.txt", bundle);
     snprintf(spath, sizeof(spath), "%s/SEAL.txt", bundle);
@@ -433,6 +517,118 @@ int main(int argc, char **argv) {
     int qh = strcmp(get_val("qnx.host_present"), "1") == 0;
     int qt2 = strcmp(get_val("qnx.target_present"), "1") == 0;
     const char *qnxf = (qh && qt2) ? "RECORDED_PRESENT_FLAGS" : "RECORDED_ABSENT_FLAGS";
+    /* --- Signature phase (Level 3). Exactly what is signed: the bytes
+     * "FUNES-SIGN-1\n" + manifest sha256 hex + "\n". The manifest in turn
+     * binds every blob digest; signatures/ itself is not signed. --- */
+    {
+        char sigd[PATH_MAX], sigp[PATH_MAX + 64], txtp[PATH_MAX + 64];
+        snprintf(sigd, sizeof(sigd), "%s/signatures", bundle);
+        snprintf(sigp, sizeof(sigp), "%s/ed25519.sig", sigd);
+        snprintf(txtp, sizeof(txtp), "%s/signer.txt", sigd);
+        struct stat sst, tst;
+        int has_sig = (lstat(sigp, &sst) == 0);
+        int has_txt = (lstat(txtp, &tst) == 0);
+        if (has_sig || has_txt) {
+            if (!has_sig || !has_txt) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "incomplete signature material (need both ed25519.sig and signer.txt)");
+            }
+            if (S_ISLNK(sst.st_mode) || !S_ISREG(sst.st_mode) || sst.st_size != 64) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "ed25519.sig must be a regular 64-byte file, not a symlink");
+            }
+            size_t tlen = 0;
+            uint8_t *tbuf = read_file(txtp, &tlen);
+            if (!tbuf || tlen > 4096) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf, "signer.txt unreadable or oversized");
+            }
+            char v_alg[32] = "", v_man[128] = "", v_dom[64] = "", v_pk[128] = "", v_fp[128] = "";
+            if (signer_get((const char *)tbuf, "algorithm", v_alg, sizeof(v_alg)) != 0 ||
+                signer_get((const char *)tbuf, "manifest_sha256", v_man, sizeof(v_man)) != 0 ||
+                signer_get((const char *)tbuf, "payload_domain", v_dom, sizeof(v_dom)) != 0 ||
+                signer_get((const char *)tbuf, "signer_pubkey_hex", v_pk, sizeof(v_pk)) != 0 ||
+                signer_get((const char *)tbuf, "signer_fingerprint_sha256", v_fp, sizeof(v_fp)) != 0) {
+                free(tbuf);
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf, "signer.txt is missing required fields");
+            }
+            free(tbuf);
+            if (strcmp(v_alg, "ed25519") != 0 || strcmp(v_dom, "FUNES-SIGN-1") != 0) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "unsupported signature algorithm or domain (only ed25519/FUNES-SIGN-1 accepted)");
+            }
+            if (strcmp(v_man, mhex) != 0) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "signature commits to manifest %s, bundle manifest is %s", v_man, mhex);
+            }
+            uint8_t pk[32];
+            if (hex_decode(v_pk, pk, 32) != 0) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf, "signer_pubkey_hex malformed");
+            }
+            char real_fp[65];
+            hash_bytes(pk, 32, real_fp);
+            if (strcmp(v_fp, real_fp) != 0) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "signer fingerprint does not match signer public key");
+            }
+            snprintf(g_fp, sizeof(g_fp), "%s", real_fp);
+            size_t siglen2 = 0;
+            uint8_t *sigbuf = read_file(sigp, &siglen2);
+            if (!sigbuf || siglen2 != 64) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf, "ed25519.sig unreadable");
+            }
+            if (!sodium_verify_available()) {
+                snprintf(g_sig, sizeof(g_sig), "UNVERIFIED");
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                snprintf(g_detail, sizeof(g_detail),
+                         "libsodium unavailable; signature present but not cryptographically verified");
+                free(sigbuf);
+                /* Integrity stands; authentication explicitly does not. */
+                g_code = "";
+                g_exit = 0;
+                report_and_exit("INTEGRITY_VALID", "ALL_PRESENT", testobs, qnxf);
+            }
+            char payload[128];
+            int plen = snprintf(payload, sizeof(payload), "FUNES-SIGN-1\n%s\n", mhex);
+            int vok = g_verify_detached(sigbuf, (const uint8_t *)payload,
+                                        (unsigned long long)plen, pk);
+            free(sigbuf);
+            if (vok != 0) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "Ed25519 signature does not verify under the signer public key in the bundle");
+            }
+            snprintf(g_sig, sizeof(g_sig), "VALID");
+            if (trusted_path) {
+                uint8_t tpk[32];
+                if (read_trusted_pubkey(trusted_path, tpk) != 0) {
+                    fprintf(stderr, "funes-verify: --trusted-key file %s is not 64 hex chars\n", trusted_path);
+                    return 1;
+                }
+                if (memcmp(tpk, pk, 32) != 0) {
+                    snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                    sig_fail("SIGNER_UNTRUSTED", 9, testobs, qnxf,
+                             "signer key does not match the supplied trusted key");
+                }
+                snprintf(g_trust, sizeof(g_trust), "TRUSTED_SIGNER");
+            } else {
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                snprintf(g_detail, sizeof(g_detail),
+                         "signature valid under bundle signer key; no trusted key supplied, so origin is not authenticated");
+            }
+        }
+    }
     g_code = "";
     g_exit = 0;
     report_and_exit("INTEGRITY_VALID", "ALL_PRESENT", testobs, qnxf);

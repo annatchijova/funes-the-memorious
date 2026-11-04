@@ -1,6 +1,6 @@
 # Verifier Semantics
 
-Status: implemented by Level 1 (`verifier/funes_verify.c`). Language: English.
+Status: implemented by Level 1 and Level 3 (`verifier/funes_verify.c`). Language: English.
 
 ## Independence contract
 
@@ -18,8 +18,8 @@ Human output and `--json` output carry the same fields:
 | Field | Values (v1) |
 |---|---|
 | `integrity_status` | `INTEGRITY_VALID`, `INTEGRITY_INVALID`, `NOT_CHECKED` |
-| `signature_status` | `NOT_PRESENT` (v1; signature support is Level 3) |
-| `signer_trust_status` | `NOT_APPLICABLE` (v1) |
+| `signature_status` | `NOT_PRESENT`, `VALID`, `INVALID`, `UNVERIFIED` (libsodium unavailable) |
+| `signer_trust_status` | `NOT_APPLICABLE` (no signature), `UNTRUSTED_SIGNER`, `TRUSTED_SIGNER` (matches the reviewer-supplied `--trusted-key`) |
 | `test_observation_status` | `OBSERVED` if at least one `OBSERVED` test record exists and integrity is valid; `IMPORTED_ONLY` if tests exist but all are `IMPORTED`; `NO_TEST_RECORD` otherwise |
 | `artifact_status` | `ALL_PRESENT`, `MISSING`, `DIGEST_MISMATCH`, `NOT_CHECKED` |
 | `qnx_toolchain_status` | `RECORDED_PRESENT_FLAGS` / `RECORDED_ABSENT_FLAGS` (what the manifest records about `QNX_HOST`/`QNX_TARGET` presence; not a QNX verification) |
@@ -42,6 +42,8 @@ verified execution.
 | 5 | `UNSUPPORTED_SCHEMA` | `schema_version` is not `1` |
 | 6 | `RESOURCE_LIMIT_EXCEEDED` | Manifest/blob/count limits exceeded |
 | 7 | `SEAL_MISMATCH` | `SEAL.txt` does not commit to the manifest bytes |
+| 8 | `SIGNATURE_INVALID` | Signature material incomplete/malformed, commits to a different manifest, or fails Ed25519 verification (integrity may still be valid and is reported as such) |
+| 9 | `SIGNER_UNTRUSTED` | Signature is valid under the bundle's signer key, but that key does not match the supplied `--trusted-key` |
 
 Exit 1 is reserved for verifier usage/internal errors (unreadable bundle
 directory, out of memory) and is never used for evidence findings, so scripts

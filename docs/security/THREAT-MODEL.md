@@ -76,8 +76,13 @@ interface <-> authoritative verifier result (Level 5).
 - **Skewed/fabricated timestamps.** Wall-clock `started_unix` is labeled as
   collector-clock evidence; elapsed time uses a monotonic clock. Neither is
   presented as trusted time.
-- **Attacker-generated signing keys.** Level 3 concern; v1 has no signatures
-  and reports `NOT_PRESENT` so there is nothing to confuse.
+- **Attacker-generated signing keys.** The verifier never creates or adopts
+  a trust root: without `--trusted-key`, even a cryptographically valid
+  signature reports `UNTRUSTED_SIGNER`; with one, a mismatching signer is
+  `SIGNER_UNTRUSTED` (exit 9). The signed payload is domain-separated
+  (`FUNES-SIGN-1`) and the algorithm is fixed in code, so bundle metadata
+  cannot negotiate a weaker path. Seed files are `0600`, `O_EXCL`, warned as
+  unencrypted, and never enter bundles.
 - **Bad test assertions / forged success output.** A test that prints
   "PASS" and exits 1 is recorded with exit status 1. Interpretation of test
   semantics stays with the reviewer; only exit status and output are

@@ -47,6 +47,9 @@ $ funes doctor                       # inspect host + QNX toolchain
 $ funes capture --out BUNDLE --source SRC --artifact OUT:target-executable -- BUILD_CMD...
 $ funes add-test --bundle BUNDLE --artifact-sha256 HEX -- TEST_CMD...
 $ funes-verify BUNDLE                # independent offline check
+$ funes keygen --out seed.txt --pub-out pub.txt   # once; seed stays private
+$ funes sign --bundle BUNDLE --key seed.txt
+$ funes-verify --trusted-key pub.txt BUNDLE        # authenticated only under your key
 $ funes-verify --json BUNDLE
 ```
 
@@ -57,8 +60,8 @@ with exit 3 and a diagnostic naming the exact artifact and digest that
 diverged. That mutation exercise — not a green checkmark — is the core
 demonstration. Step-by-step: [docs/DEMO.md](docs/DEMO.md).
 
-**Current status:** Levels 0 and 1 are implemented and tested on the Linux
-host (`VERIFIED_HOST_ONLY`, 41-check suite; see [docs/STATUS.md](docs/STATUS.md)).
+**Current status:** Levels 0, 1 and 3 are implemented and tested on the Linux
+host (`VERIFIED_HOST_ONLY`, 61-check suite; see [docs/STATUS.md](docs/STATUS.md)).
 QNX integration (Level 2) is `BLOCKED`: no QNX SDP is installed on the
 development host, and no QNX result is claimed.
 
@@ -141,7 +144,7 @@ Full entry/exit criteria, deliverables, threats, and tests per level: [docs/ROAD
 | 0 | Foundations and invariants | DONE |
 | 1 | Real host capture and independent verification | DONE (`VERIFIED_HOST_ONLY`) |
 | 2 | Genuine QNX SDP 8.0 build integration | BLOCKED — QNX SDP 8.0 not installed on the dev host |
-| 3 | Authenticated provenance and trust policies | NOT_STARTED |
+| 3 | Authenticated provenance and trust policies | DONE (`VERIFIED_HOST_ONLY`) |
 | 4 | Test evidence and QNX runtime | NOT_STARTED |
 | 5 | Forensic comparison and audit UX | NOT_STARTED |
 | 6 | Security, performance, portability and release | NOT_STARTED |
@@ -301,7 +304,7 @@ Scoped to what is true today:
 | Independent verifier | Separate C binary, no collector internal imports | DONE (`VERIFIED_HOST_ONLY`) |
 | Artifact / log mutation | Non-zero verification failure with specific diagnostic | DONE (`VERIFIED_HOST_ONLY`) |
 | Missing evidence | Exact diagnostic, fail closed | DONE (`VERIFIED_HOST_ONLY`) |
-| Unknown signer | Reported untrusted, never authenticated | No signatures in v1 (`NOT_PRESENT`); Level 3 |
+| Unknown signer | Reported untrusted, never authenticated | DONE (`VERIFIED_HOST_ONLY`): exits 8/9, `SIGNER_UNTRUSTED` |
 | QNX `qcc` detection | Real tool and environment output | BLOCKED — SDP absent |
 | QNX 8 target compilation | Real `qcc` log and target binary | BLOCKED — SDP absent |
 | QNX QEMU runtime | Real target execution output | NOT_RUN |

@@ -170,6 +170,55 @@ echo "== verifier independence (clean environment) =="
 env -i "$VERIFY" "$TMP/b1" >"$TMP/vind.txt" 2>&1
 expect_exit 0 $? "verifier runs with empty environment, no collector state"
 
+echo "== level 3: signing and trust roots =="
+$FUNES capture --out "$TMP/bs" -- /bin/echo signed-evidence >"$TMP/caps.log" 2>&1
+$FUNES keygen --out "$TMP/seed1.txt" --pub-out "$TMP/pub1.txt" >"$TMP/kg1.log" 2>&1
+expect_exit 0 $? "keygen creates keypair"
+[ "$(stat -c %a "$TMP/seed1.txt")" = "600" ]; ok $? "seed file mode 0600"
+$FUNES keygen --out "$TMP/seed1.txt" --pub-out "$TMP/pub1b.txt" >"$TMP/kg1b.log" 2>&1
+if [ $? -ne 0 ]; then PASS=$((PASS + 1)); echo "PASS: keygen refuses to overwrite existing key";
+else FAIL=$((FAIL + 1)); echo "FAIL: keygen refuses to overwrite existing key"; fi
+$FUNES sign --bundle "$TMP/bs" --key "$TMP/seed1.txt" >"$TMP/sign1.log" 2>&1
+expect_exit 0 $? "sign produces signature material"
+[ -f "$TMP/bs/signatures/ed25519.sig" ]; ok $? "signature file present"
+SEEDHEX=$(tail -n 1 "$TMP/seed1.txt")
+if grep -rq "$SEEDHEX" "$TMP/bs"; then
+    FAIL=$((FAIL + 1)); echo "FAIL: private seed never enters bundle"
+else PASS=$((PASS + 1)); echo "PASS: private seed never enters bundle"; fi
+$VERIFY "$TMP/bs" >"$TMP/vs0.txt" 2>&1
+expect_exit 0 $? "signed bundle verifies without trust root (integrity)"
+grep -q "signature_status=VALID" "$TMP/vs0.txt"; ok $? "signature VALID under bundle key"
+grep -q "signer_trust_status=UNTRUSTED_SIGNER" "$TMP/vs0.txt"; ok $? "no trust root means UNTRUSTED, never authenticated"
+$VERIFY --trusted-key "$TMP/pub1.txt" "$TMP/bs" >"$TMP/vs1.txt" 2>&1
+expect_exit 0 $? "signed bundle verifies with matching trusted key"
+grep -q "signer_trust_status=TRUSTED_SIGNER" "$TMP/vs1.txt"; ok $? "matching key is TRUSTED_SIGNER"
+grep -q "does not certify software safety" "$TMP/vs1.txt"; ok $? "trusted report still states limits (no execution proof)"
+$FUNES keygen --out "$TMP/seed2.txt" --pub-out "$TMP/pub2.txt" >"$TMP/kg2.log" 2>&1
+$VERIFY --trusted-key "$TMP/pub2.txt" "$TMP/bs" >"$TMP/vs2.txt" 2>&1
+expect_exit 9 $? "different trusted key rejected"
+grep -q "SIGNER_UNTRUSTED" "$TMP/vs2.txt"; ok $? "wrong trust root named SIGNER_UNTRUSTED"
+cp -r "$TMP/bs" "$TMP/bs_badsig"
+printf 'Z' | dd of="$TMP/bs_badsig/signatures/ed25519.sig" bs=1 seek=0 count=1 conv=notrunc 2>/dev/null
+$VERIFY --trusted-key "$TMP/pub1.txt" "$TMP/bs_badsig" >"$TMP/vs3.txt" 2>&1
+expect_exit 8 $? "flipped signature byte rejected"
+grep -q "SIGNATURE_INVALID" "$TMP/vs3.txt"; ok $? "bad signature named SIGNATURE_INVALID"
+cp -r "$TMP/bs" "$TMP/bs_stale"
+$FUNES capture --out "$TMP/bother" -- /bin/echo other >"$TMP/capo.log" 2>&1
+cp "$TMP/bother/manifest.txt" "$TMP/bs_stale/manifest.txt"
+cp "$TMP/bother/SEAL.txt" "$TMP/bs_stale/SEAL.txt"
+cp -r "$TMP/bother/blobs" "$TMP/bs_stale/blobs2" 2>/dev/null
+rm -rf "$TMP/bs_stale/blobs"
+mv "$TMP/bs_stale/blobs2" "$TMP/bs_stale/blobs"
+$VERIFY --trusted-key "$TMP/pub1.txt" "$TMP/bs_stale" >"$TMP/vs4.txt" 2>&1
+expect_exit 8 $? "signature over stale manifest rejected"
+grep -q "SIGNATURE_INVALID" "$TMP/vs4.txt"; ok $? "stale signature named SIGNATURE_INVALID"
+printf 'not-a-key\n' >"$TMP/badkey.txt"
+$FUNES sign --bundle "$TMP/bs" --key "$TMP/badkey.txt" >"$TMP/signbad.log" 2>&1
+if [ $? -ne 0 ]; then PASS=$((PASS + 1)); echo "PASS: malformed seed file rejected by sign";
+else FAIL=$((FAIL + 1)); echo "FAIL: malformed seed file rejected by sign"; fi
+$VERIFY --json --trusted-key "$TMP/pub1.txt" "$TMP/bs" >"$TMP/vs5.txt" 2>&1
+grep -q '"signer_trust_status":"TRUSTED_SIGNER"' "$TMP/vs5.txt"; ok $? "json reports TRUSTED_SIGNER"
+
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"
 [ "$FAIL" -eq 0 ]

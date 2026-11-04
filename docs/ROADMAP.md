@@ -16,7 +16,7 @@ Live status summary:
 | 0 | Foundations and Invariants | DONE |
 | 1 | Real Host Capture and Independent Verification | DONE (VERIFIED_HOST_ONLY) |
 | 2 | Genuine QNX SDP 8.0 Build Integration | BLOCKED |
-| 3 | Authenticated Provenance and Trust Policies | NOT_STARTED |
+| 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | NOT_STARTED |
 | 5 | Forensic Comparison and Audit UX | NOT_STARTED |
 | 6 | Security, Performance, Portability and Release | NOT_STARTED |
@@ -269,7 +269,17 @@ untrusted keys, and its reports make no false authenticity statements.
 **Observable demo.** Sign → verify authenticated; swap key → verify reports
 untrusted; edit payload → signature invalid.
 
-**Status: NOT_STARTED.**
+**Status: DONE (`VERIFIED_HOST_ONLY`).** Evidence: `make test` reports
+`pass=61 fail=0` (see `docs/STATUS.md`): keygen (mode `0600`, overwrite
+refused), signing, verification with and without a trust root, wrong-root
+rejection (exit 9, `SIGNER_UNTRUSTED`), flipped signature byte and stale
+manifest commitment (exit 8, `SIGNATURE_INVALID`), malformed seed refusal,
+seed material absent from bundles, and JSON trust reporting. Design record:
+`docs/architecture/ADR-002-SIGNING.md` (libsodium via runtime `dlopen`;
+fixed Ed25519/`FUNES-SIGN-1` payload; no metadata-selected algorithm).
+Accepted limitation carried forward: seed files are unencrypted at rest
+(owner-managed, warned); key rotation is manual (new keypair, redistribute
+the public half).
 
 **Non-goals.** Transparency logs, timestamp authorities, or any hosted
 trust service (externally anchored mode stays future work).

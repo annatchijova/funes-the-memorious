@@ -96,10 +96,28 @@ that is missing is `MISSING_ARTIFACT`; one whose bytes hash differently is
 Exactly one line: `<sha256 of manifest.txt bytes><space><space>manifest.txt\n`.
 The seal commits to the manifest bytes. Integrity mode (v1) has no signature:
 anyone who can rewrite blobs can rewrite manifest and seal together, so a
-valid seal proves internal consistency, not origin. Authentication is
-Level 3 and will be a separate signature file over domain-separated bytes
-(`FUNES-SIGN-1\n` + manifest digest); v1 verifiers must report
-`signature_status=NOT_PRESENT`, never authenticated.
+valid seal proves internal consistency, not origin. Verifiers report
+`signature_status=NOT_PRESENT` for unsigned bundles, never authenticated.
+
+## Signatures (Level 3, additive; format version unchanged)
+
+Optional directory `signatures/` beside the manifest:
+
+```text
+signatures/
+  ed25519.sig    64 raw signature bytes (regular file, never a symlink)
+  signer.txt     algorithm / manifest_sha256 / payload_domain /
+                 signer_fingerprint_sha256 / signer_pubkey_hex lines
+```
+
+Signed bytes are exactly `FUNES-SIGN-1` + LF + the 64-char hex SHA-256 of
+`manifest.txt` + LF, verified with Ed25519. The algorithm is fixed by the
+verifier; `signer.txt` values are claims checked against that fixed
+expectation, and the fingerprint is recomputed from the public-key bytes.
+Authentication exists only relative to a reviewer-supplied trusted public
+key (`funes-verify --trusted-key`); see `VERIFIER-SEMANTICS.md` and
+`ADR-002-SIGNING.md`. Signing never modifies the manifest, so unsigned v1
+verification is unaffected.
 
 ## Canonicalization and determinism
 
