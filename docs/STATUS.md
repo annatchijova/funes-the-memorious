@@ -19,7 +19,7 @@ make test                 # sh tests/run_tests.sh
 ./bin/funes doctor --json
 ```
 
-Observed test outcome: **61 PASS, 0 FAIL** (`RESULT: pass=61 fail=0`, suite
+Observed test outcome: **74 PASS, 0 FAIL** (`RESULT: pass=74 fail=0`, suite
 exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Validation matrix
@@ -46,11 +46,13 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | QNX 8 target compiled | Actual compiler and binary | Not attempted without SDP | BLOCKED (`NOT_RUN`) |
 | QNX QEMU runtime | Actual execution evidence | Not attempted | NOT_RUN |
 | README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
-| Security tests | Passed/failed counts | Hostile cases above are part of the 61-check suite | DONE (`VERIFIED_HOST_ONLY`) |
+| Security tests | Passed/failed counts | Hostile cases above are part of the 74-check suite | DONE (`VERIFIED_HOST_ONLY`) |
+| Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
+| Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
 
 ## Test accounting
 
-- Actually run: 61 host checks (unit-via-CLI, integration, adversarial; 20 of them Level 3 signing/trust).
+- Actually run: 74 host checks (unit-via-CLI, integration, adversarial; Level 3 signing/trust, Level 5 comparison, and Red Team Round 1 regressions RT-01..RT-06 included).
 - Contract tests against the real QNX SDP: 0.
 - Synthetic/synthetic-labeled exercises: the tamper/missing/schema bundles
   are mutations of a real captured bundle, produced by the suite at test

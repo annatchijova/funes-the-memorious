@@ -61,7 +61,7 @@ diverged. That mutation exercise — not a green checkmark — is the core
 demonstration. Step-by-step: [docs/DEMO.md](docs/DEMO.md).
 
 **Current status:** Levels 0, 1 and 3 are implemented and tested on the Linux
-host (`VERIFIED_HOST_ONLY`, 61-check suite; see [docs/STATUS.md](docs/STATUS.md)).
+host (`VERIFIED_HOST_ONLY`, 74-check suite; see [docs/STATUS.md](docs/STATUS.md)).
 QNX integration (Level 2) is `BLOCKED`: no QNX SDP is installed on the
 development host, and no QNX result is claimed.
 
@@ -146,7 +146,7 @@ Full entry/exit criteria, deliverables, threats, and tests per level: [docs/ROAD
 | 2 | Genuine QNX SDP 8.0 build integration | BLOCKED — QNX SDP 8.0 not installed on the dev host |
 | 3 | Authenticated provenance and trust policies | DONE (`VERIFIED_HOST_ONLY`) |
 | 4 | Test evidence and QNX runtime | NOT_STARTED |
-| 5 | Forensic comparison and audit UX | NOT_STARTED |
+| 5 | Forensic Comparison and Audit UX | DONE (`VERIFIED_HOST_ONLY`) |
 | 6 | Security, performance, portability and release | NOT_STARTED |
 | 7 | Hackathon jury experience | NOT_STARTED |
 

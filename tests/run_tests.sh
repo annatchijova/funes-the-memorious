@@ -219,6 +219,78 @@ else FAIL=$((FAIL + 1)); echo "FAIL: malformed seed file rejected by sign"; fi
 $VERIFY --json --trusted-key "$TMP/pub1.txt" "$TMP/bs" >"$TMP/vs5.txt" 2>&1
 grep -q '"signer_trust_status":"TRUSTED_SIGNER"' "$TMP/vs5.txt"; ok $? "json reports TRUSTED_SIGNER"
 
+echo "== level 5: forensic comparison =="
+./bin/funes compare "$TMP/b1" "$TMP/b1" >"$TMP/cmp0.txt" 2>&1
+expect_exit 0 $? "compare identical bundle exits 0"
+grep -q "material_differences=0" "$TMP/cmp0.txt"; ok $? "identical evidence reports zero diffs"
+printf 'int main(void){return 7;}\n' >"$TMP/work/main2.c"
+./bin/funes capture --out "$TMP/b3" --source "$TMP/work/main2.c" \
+    --artifact "$TMP/work/app3:target-executable" \
+    -- gcc -std=c11 -O2 -o "$TMP/work/app3" "$TMP/work/main2.c" >"$TMP/cap3.log" 2>&1
+./bin/funes compare "$TMP/b1" "$TMP/b3" >"$TMP/cmp1.txt" 2>&1
+expect_exit 10 $? "compare different builds exits 10"
+grep -q "DIFF source.digest" "$TMP/cmp1.txt"; ok $? "compare names source change"
+grep -q "DIFF artifact.0.sha256" "$TMP/cmp1.txt"; ok $? "compare names artifact change"
+./bin/funes compare --json "$TMP/b1" "$TMP/b3" >"$TMP/cmp2.txt" 2>&1
+grep -q '"compare_status":"OK"' "$TMP/cmp2.txt"; ok $? "compare json reports differences"
+./bin/funes compare "$TMP/b1" "$TMP/b1_tamper_art" >"$TMP/cmp3.txt" 2>&1
+expect_exit 2 $? "compare refuses tampered input"
+grep -q "INVALID_INPUT" "$TMP/cmp3.txt"; ok $? "tampered compare input named INVALID_INPUT"
+
+echo "== red team round 1 regressions =="
+cp -r "$TMP/b1" "$TMP/brt1"
+printf 'evil' >"$TMP/brt1/blobs/sha256/.hidden"
+$VERIFY "$TMP/brt1" >"$TMP/vrt1.txt" 2>&1
+expect_exit 2 $? "RT-01 hidden dotfile in blobs rejected"
+mkdir -p "$TMP/brt2"
+ln -s "$TMP/b1/manifest.txt" "$TMP/brt2/manifest.txt"
+ln -s "$TMP/b1/SEAL.txt" "$TMP/brt2/SEAL.txt"
+ln -s "$TMP/b1/blobs" "$TMP/brt2/blobs"
+$VERIFY "$TMP/brt2" >"$TMP/vrt2.txt" 2>&1
+expect_exit 2 $? "RT-02 fully symlinked bundle rejected"
+mkdir -p "$TMP/evil"
+cat >"$TMP/evil/fake.c" <<'FAKEEOF'
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+int crypto_sign_seed_keypair(unsigned char *pk, unsigned char *sk, const unsigned char *seed) {
+    FILE *f = fopen(FAKELOG, "ab");
+    if (f) { fwrite(seed, 1, 32, f); fclose(f); }
+    memset(pk, 0x41, 32); memset(sk, 0x42, 64);
+    return 0;
+}
+int crypto_sign_detached(unsigned char *sig, unsigned long long *len, const unsigned char *m, unsigned long long mlen, const unsigned char *sk) {
+    (void)m; (void)mlen;
+    FILE *f = fopen(FAKELOG, "ab");
+    if (f) { fwrite(sk, 1, 64, f); fclose(f); }
+    memset(sig, 0x43, 64); *len = 64;
+    return 0;
+}
+FAKEEOF
+# shellcheck disable=SC2086
+gcc -shared -fPIC -DFAKELOG="\"$TMP/evil/leak.log\"" -o "$TMP/evil/libsodium.so.23" "$TMP/evil/fake.c" 2>"$TMP/evil/cc.log"
+if [ -f "$TMP/evil/libsodium.so.23" ]; then
+    rm -f "$TMP/evil/leak.log"
+    LD_LIBRARY_PATH="$TMP/evil" $FUNES sign --bundle "$TMP/b2" --key "$TMP/seed1.txt" >"$TMP/signrt.log" 2>&1
+    if [ -f "$TMP/evil/leak.log" ]; then
+        FAIL=$((FAIL + 1)); echo "FAIL: RT-03 fake libsodium received no key material"
+    else PASS=$((PASS + 1)); echo "PASS: RT-03 fake libsodium received no key material"; fi
+else
+    echo "SKIP: RT-03 fake libsodium build unavailable"
+fi
+$FUNES capture --out "$TMP/brt5" -- /bin/true >"$TMP/caprt5.log" 2>&1
+mkdir -p "$TMP/brt5/signatures"
+printf 'IMPORTANT-DATA' >"$TMP/victim.txt"
+ln -s "$TMP/victim.txt" "$TMP/brt5/signatures/ed25519.sig"
+$FUNES sign --bundle "$TMP/brt5" --key "$TMP/seed1.txt" >"$TMP/signrt5.log" 2>&1
+if [ $? -ne 0 ] && [ "$(cat "$TMP/victim.txt")" = "IMPORTANT-DATA" ]; then
+    PASS=$((PASS + 1)); echo "PASS: RT-05 sign refuses symlinked signature file, victim intact"
+else FAIL=$((FAIL + 1)); echo "FAIL: RT-05 sign refuses symlinked signature file, victim intact"; fi
+cp -r "$TMP/b1" "$TMP/brt6"
+printf 'fake report' >"$TMP/brt6/extra-report.html"
+$VERIFY "$TMP/brt6" >"$TMP/vrt6.txt" 2>&1
+expect_exit 2 $? "RT-06 unexpected bundle-root file rejected"
+
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"
 [ "$FAIL" -eq 0 ]

@@ -256,10 +256,17 @@ static void seal_bundle(const char *bundle, linelist *lines) {
     char hex[65];
     hash_bytes((const uint8_t *)sb.buf, sb.len, hex);
     snprintf(spath, sizeof(spath), "%s/SEAL.txt", bundle);
-    f = fopen(spath, "wb");
-    if (!f) die("cannot write SEAL.txt: %s", strerror(errno));
-    fprintf(f, "%s  manifest.txt\n", hex);
-    if (fclose(f) != 0) die("cannot close SEAL.txt: %s", strerror(errno));
+    {
+        /* Temp + rename, like the manifest: never fopen a bundle path that
+         * could be a pre-planted symlink (red-team round 1, RT-05 family). */
+        char stmp[PATH_MAX + 64];
+        snprintf(stmp, sizeof(stmp), "%s.tmp%ld", spath, (long)getpid());
+        f = fopen(stmp, "wb");
+        if (!f) die("cannot write SEAL.txt: %s", strerror(errno));
+        fprintf(f, "%s  manifest.txt\n", hex);
+        if (fclose(f) != 0) die("cannot close SEAL.txt: %s", strerror(errno));
+        if (rename(stmp, spath) != 0) die("cannot seal SEAL.txt: %s", strerror(errno));
+    }
     free(sb.buf);
     printf("sealed bundle at %s (manifest sha256 %s)\n", bundle, hex);
 }
@@ -483,8 +490,13 @@ static sign_detached_fn g_sign_detached = NULL;
 
 static void load_sodium_sign(void) {
     if (g_seed_keypair && g_sign_detached) return;
-    void *h = dlopen("libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
-    if (!h) h = dlopen("libsodium.so", RTLD_NOW | RTLD_LOCAL);
+    /* Absolute system paths first: a bare dlopen name honors LD_LIBRARY_PATH,
+     * which let a fake libsodium receive key material (round 1, RT-03). */
+    void *h = dlopen("/lib/x86_64-linux-gnu/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/lib/x86_64-linux-gnu/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/lib64/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/local/lib/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    /* No bare-name fallback on the key-handling path: fail closed. */
     if (!h) die("libsodium is unavailable (needed only for keygen/sign); install libsodium or skip signing. Integrity-only bundles remain fully usable");
     g_seed_keypair = (sign_seed_keypair_fn)dlsym(h, "crypto_sign_seed_keypair");
     g_sign_detached = (sign_detached_fn)dlsym(h, "crypto_sign_detached");
@@ -609,10 +621,14 @@ static int cmd_sign(int argc, char **argv) {
     char sdir[PATH_MAX];
     snprintf(sdir, sizeof(sdir), "%s/signatures", bundle);
     if (mkdir(sdir, 0755) != 0 && errno != EEXIST) die("cannot create %s: %s", sdir, strerror(errno));
+    /* O_NOFOLLOW writes: a pre-planted symlink in the bundle must not turn
+     * signing into an overwrite of an outside file (round 1, RT-05). */
     char sigpath[PATH_MAX + 64];
     snprintf(sigpath, sizeof(sigpath), "%s/ed25519.sig", sdir);
-    FILE *sf = fopen(sigpath, "wb");
-    if (!sf) die("cannot write signature: %s", strerror(errno));
+    int sfd = open(sigpath, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+    if (sfd < 0) die("cannot write signature %s: %s", sigpath, strerror(errno));
+    FILE *sf = fdopen(sfd, "wb");
+    if (!sf) { close(sfd); die("cannot write signature: %s", strerror(errno)); }
     if (fwrite(sig, 1, 64, sf) != 64) { fclose(sf); die("short write on signature"); }
     if (fclose(sf) != 0) die("cannot close signature: %s", strerror(errno));
     char pkhex[65], fp[65];
@@ -620,8 +636,10 @@ static int cmd_sign(int argc, char **argv) {
     pubkey_fingerprint(pk, fp);
     char txtpath[PATH_MAX + 64];
     snprintf(txtpath, sizeof(txtpath), "%s/signer.txt", sdir);
-    FILE *tf = fopen(txtpath, "wb");
-    if (!tf) die("cannot write signer.txt: %s", strerror(errno));
+    int tfd = open(txtpath, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+    if (tfd < 0) die("cannot write signer.txt %s: %s", txtpath, strerror(errno));
+    FILE *tf = fdopen(tfd, "wb");
+    if (!tf) { close(tfd); die("cannot write signer.txt: %s", strerror(errno)); }
     fprintf(tf, "algorithm=ed25519\nmanifest_sha256=%s\npayload_domain=FUNES-SIGN-1\nsigner_fingerprint_sha256=%s\nsigner_pubkey_hex=%s\n", mdigest, fp, pkhex);
     if (fclose(tf) != 0) die("cannot close signer.txt: %s", strerror(errno));
     printf("signed bundle %s manifest_sha256=%s signer_fingerprint_sha256=%s\n", bundle, mdigest, fp);
@@ -641,6 +659,7 @@ static void usage(FILE *out) {
         "  funes import-test --bundle DIR --artifact-sha256 HEX --report FILE\n"
         "  funes keygen --out SEEDFILE --pub-out PUBFILE\n"
         "  funes sign --bundle DIR --key SEEDFILE\n"
+        "  funes compare [--json] BUNDLE_A BUNDLE_B\n"
         "  funes --help\n"
         "capture/add-test exit status mirrors the executed command; the bundle\n"
         "is sealed even when that command fails. See docs/spec/.\n");
@@ -867,6 +886,169 @@ static int cmd_add_test(int argc, char **argv, int imported, const char *report)
     return rc;
 }
 
+/* --- Level 5: forensic comparison. Consumes the independent verifier
+ * first; manifest values are only diffed after both bundles verify. --- */
+static const char *mv_get(linelist *l, const char *key) {
+    size_t klen = strlen(key);
+    for (size_t i = 0; i < l->count; i++) {
+        if (strncmp(l->lines[i], key, klen) == 0 && l->lines[i][klen] == '=')
+            return l->lines[i] + klen + 1;
+    }
+    return "NONE";
+}
+
+static int run_sibling_verify(const char *bundle) {
+    char exe[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (n <= 0) return -1;
+    exe[n] = '\0';
+    char *slash = strrchr(exe, '/');
+    if (!slash) return -1;
+    slash[1] = '\0';
+    char vpath[PATH_MAX + 64];
+    snprintf(vpath, sizeof(vpath), "%sfunes-verify", exe);
+    if (access(vpath, X_OK) != 0) return -1;
+    char *args[4];
+    args[0] = vpath;
+    args[1] = (char *)bundle;
+    args[2] = NULL;
+    capture_result r;
+    run_capture(args, 30, -1, &r);
+    int rc = r.exit_status;
+    free(r.out_buf);
+    free(r.err_buf);
+    return rc;
+}
+
+static int g_diffs = 0;
+static int g_json_mode = 0;
+static int g_first_diff = 1;
+
+static void diff_field(const char *name, const char *a, const char *b) {
+    if (strcmp(a, b) == 0) return;
+    g_diffs++;
+    if (g_json_mode) {
+        printf("%s{\"field\":\"%s\",\"a\":\"%s\",\"b\":\"%s\"}", g_first_diff ? "" : ",", name, a, b);
+        g_first_diff = 0;
+    } else {
+        printf("DIFF %s: %s -> %s\n", name, a, b);
+    }
+}
+
+static void collect_by_suffix(linelist *l, const char *marker, strbuf *out) {
+    /* Collect values of keys containing marker, sorted by full line. */
+    linelist tmp;
+    ll_init(&tmp);
+    for (size_t i = 0; i < l->count; i++) {
+        if (strstr(l->lines[i], marker)) ll_add(&tmp, l->lines[i]);
+    }
+    qsort(tmp.lines, tmp.count, sizeof(char *), cmp_str);
+    for (size_t i = 0; i < tmp.count; i++) {
+        const char *eq = strchr(tmp.lines[i], '=');
+        sb_add(out, eq ? eq + 1 : tmp.lines[i]);
+        sb_add(out, ";");
+        free(tmp.lines[i]);
+    }
+    free(tmp.lines);
+}
+
+static int cmd_compare(int argc, char **argv) {
+    const char *ba = NULL, *bb = NULL;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--json") == 0) g_json_mode = 1;
+        else if (!ba) ba = argv[i];
+        else if (!bb) bb = argv[i];
+        else die("compare: unexpected argument %s", argv[i]);
+    }
+    if (!ba || !bb) die("compare: usage: funes compare [--json] BUNDLE_A BUNDLE_B");
+    int va = run_sibling_verify(ba);
+    int vb = run_sibling_verify(bb);
+    if (va < 0 || vb < 0) die("compare: sibling funes-verify not found next to funes; comparison requires authoritative verification first");
+    if (va != 0 || vb != 0) {
+        if (g_json_mode)
+            printf("{\"compare_status\":\"INVALID_INPUT\",\"verify_a_exit\":%d,\"verify_b_exit\":%d}\n", va, vb);
+        else
+            printf("compare_status=INVALID_INPUT\nverify_a_exit=%d\nverify_b_exit=%d\ndetail=at least one bundle does not verify; refusing to diff unverified claims as fact\n", va, vb);
+        return 2;
+    }
+    linelist la, lb;
+    ll_init(&la);
+    ll_init(&lb);
+    load_manifest(ba, &la);
+    load_manifest(bb, &lb);
+    if (g_json_mode) printf("{\"compare_status\":\"OK\",\"differences\":[");
+    else printf("compare_status=OK\nverify_a=INTEGRITY_VALID\nverify_b=INTEGRITY_VALID\n");
+    static const char *fields[] = {
+        "schema_version", "source.git_head", "source.git_dirty", "source.digest",
+        "build.exit_status", "build.stdout_sha256", "artifact_count",
+        "test_count", "qnx.host_present", "qnx.target_present", NULL};
+    for (int i = 0; fields[i]; i++) diff_field(fields[i], mv_get(&la, fields[i]), mv_get(&lb, fields[i]));
+    strbuf aa, ab;
+    sb_init(&aa); sb_init(&ab);
+    collect_by_suffix(&la, ".argv.", &aa);
+    collect_by_suffix(&lb, ".argv.", &ab);
+    /* argv digests are long; report as changed-field only via a hash. */
+    {
+        char ha[65], hb[65];
+        hash_bytes((const uint8_t *)aa.buf, aa.len, ha);
+        hash_bytes((const uint8_t *)ab.buf, ab.len, hb);
+        diff_field("argv.set_sha256", ha, hb);
+    }
+    free(aa.buf); free(ab.buf);
+    sb_init(&aa); sb_init(&ab);
+    collect_by_suffix(&la, "artifact.", &aa);
+    collect_by_suffix(&lb, "artifact.", &ab);
+    {
+        char ha[65], hb[65];
+        hash_bytes((const uint8_t *)aa.buf, aa.len, ha);
+        hash_bytes((const uint8_t *)ab.buf, ab.len, hb);
+        diff_field("artifact.set_sha256", ha, hb);
+    }
+    free(aa.buf); free(ab.buf);
+    sb_init(&aa); sb_init(&ab);
+    collect_by_suffix(&la, "test.", &aa);
+    collect_by_suffix(&lb, "test.", &ab);
+    {
+        char ha[65], hb[65];
+        hash_bytes((const uint8_t *)aa.buf, aa.len, ha);
+        hash_bytes((const uint8_t *)ab.buf, ab.len, hb);
+        diff_field("test.set_sha256", ha, hb);
+    }
+    free(aa.buf); free(ab.buf);
+    /* Per-artifact detail for human readers (digest-level, by index). */
+    if (!g_json_mode) {
+        int na = atoi(mv_get(&la, "artifact_count"));
+        int nb = atoi(mv_get(&lb, "artifact_count"));
+        int mx = na > nb ? na : nb;
+        for (int i = 0; i < mx; i++) {
+            char k[128];
+            snprintf(k, sizeof(k), "artifact.%d.sha256", i);
+            const char *da = mv_get(&la, k), *db = mv_get(&lb, k);
+            if (strcmp(da, db) != 0) printf("DIFF artifact.%d.sha256: %s -> %s\n", i, da, db);
+            snprintf(k, sizeof(k), "artifact.%d.role", i);
+            const char *ra = mv_get(&la, k), *rb = mv_get(&lb, k);
+            if (strcmp(ra, rb) != 0) printf("DIFF artifact.%d.role: %s -> %s\n", i, ra, rb);
+        }
+        int ta = atoi(mv_get(&la, "test_count"));
+        int tb = atoi(mv_get(&lb, "test_count"));
+        int mt = ta > tb ? ta : tb;
+        for (int i = 0; i < mt; i++) {
+            char k[128];
+            snprintf(k, sizeof(k), "test.%d.exit_status", i);
+            const char *ea = mv_get(&la, k), *eb = mv_get(&lb, k);
+            if (strcmp(ea, eb) != 0) printf("DIFF test.%d.exit_status: %s -> %s\n", i, ea, eb);
+            snprintf(k, sizeof(k), "test.%d.origin", i);
+            const char *oa = mv_get(&la, k), *ob = mv_get(&lb, k);
+            if (strcmp(oa, ob) != 0) printf("DIFF test.%d.origin: %s -> %s\n", i, oa, ob);
+        }
+    }
+    if (g_json_mode) printf("],\"material_differences\":%d}\n", g_diffs);
+    else printf("material_differences=%d\n", g_diffs);
+    if (!g_json_mode && g_diffs == 0)
+        printf("note=material evidence is identical; timestamps, elapsed time and host paths were ignored\n");
+    return g_diffs ? 10 : 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) { usage(stderr); return 1; }
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) { usage(stdout); return 0; }
@@ -876,6 +1058,7 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "keygen") == 0) return cmd_keygen(argc - 2, argv + 2);
     if (strcmp(argv[1], "sign") == 0) return cmd_sign(argc - 2, argv + 2);
+    if (strcmp(argv[1], "compare") == 0) return cmd_compare(argc - 2, argv + 2);
     if (strcmp(argv[1], "capture") == 0) return cmd_capture(argc - 2, argv + 2);
     if (strcmp(argv[1], "add-test") == 0) return cmd_add_test(argc - 2, argv + 2, 0, NULL);
     if (strcmp(argv[1], "import-test") == 0) {

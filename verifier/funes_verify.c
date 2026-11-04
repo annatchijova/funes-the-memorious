@@ -172,8 +172,12 @@ typedef int (*verify_detached_fn)(const uint8_t *, const uint8_t *,
 static verify_detached_fn g_verify_detached = NULL;
 static int sodium_verify_available(void) {
     if (g_verify_detached) return 1;
-    void *h = dlopen("libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
-    if (!h) h = dlopen("libsodium.so", RTLD_NOW | RTLD_LOCAL);
+    /* Absolute paths first (red-team round 1, RT-03). */
+    void *h = dlopen("/lib/x86_64-linux-gnu/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/lib/x86_64-linux-gnu/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/lib64/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    if (!h) h = dlopen("/usr/local/lib/libsodium.so.23", RTLD_NOW | RTLD_LOCAL);
+    /* No bare-name fallback: a search-path library must not decide trust. */
     if (!h) return 0;
     g_verify_detached = (verify_detached_fn)dlsym(h, "crypto_sign_verify_detached");
     return g_verify_detached != NULL;
@@ -324,6 +328,19 @@ int main(int argc, char **argv) {
     snprintf(spath, sizeof(spath), "%s/SEAL.txt", bundle);
     snprintf(bdir, sizeof(bdir), "%s/blobs/sha256", bundle);
     struct stat st;
+    /* Symlinked bundle structure is rejected: evidence must live in the
+     * bundle, not point outside it (red-team round 1, finding RT-02). */
+    {
+        struct stat lst;
+        char bpath[PATH_MAX], bspath[PATH_MAX];
+        snprintf(bpath, sizeof(bpath), "%s/blobs", bundle);
+        snprintf(bspath, sizeof(bspath), "%s/blobs/sha256", bundle);
+        if (lstat(mpath, &lst) != 0) FAIL("BUNDLE_INVALID", 2, "manifest.txt missing in bundle %s", bundle);
+        if (S_ISLNK(lst.st_mode) || !S_ISREG(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "manifest.txt must be a regular file, not a symlink");
+        if (lstat(spath, &lst) == 0 && (S_ISLNK(lst.st_mode) || !S_ISREG(lst.st_mode))) FAIL("BUNDLE_INVALID", 2, "SEAL.txt must be a regular file, not a symlink");
+        if (lstat(bpath, &lst) == 0 && S_ISLNK(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blobs must not be a symlink");
+        if (lstat(bspath, &lst) == 0 && S_ISLNK(lst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blobs/sha256 must not be a symlink");
+    }
     if (stat(mpath, &st) != 0) FAIL("BUNDLE_INVALID", 2, "manifest.txt missing in bundle %s", bundle);
     if ((unsigned long long)st.st_size > MAX_MANIFEST_BYTES)
         FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "manifest exceeds %u bytes", MAX_MANIFEST_BYTES);
@@ -447,6 +464,12 @@ int main(int argc, char **argv) {
         }
         if (S_ISLNK(bst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blob %s is a symlink", digest);
         if (!S_ISREG(bst.st_mode)) FAIL("BUNDLE_INVALID", 2, "blob %s is not a regular file", digest);
+        /* Size from stat first: never stream an unbounded attacker file. */
+        if ((unsigned long long)bst.st_size != sz) {
+            g_code = "DIGEST_MISMATCH"; g_exit = 3;
+            snprintf(g_detail, sizeof(g_detail), "blob %s size %lld does not match recorded %llu", digest, (long long)bst.st_size, sz);
+            report_and_exit("INTEGRITY_INVALID", "DIGEST_MISMATCH", "NOT_CHECKED", "NOT_CHECKED");
+        }
         char fh[65];
         unsigned long long fsz = 0;
         if (hash_file_stream(bp, fh, &fsz) != 0) FAIL("BUNDLE_INVALID", 2, "blob %s unreadable", digest);
@@ -477,7 +500,7 @@ int main(int argc, char **argv) {
     if (!d) FAIL("BUNDLE_INVALID", 2, "blob directory unreadable");
     struct dirent *de;
     while ((de = readdir(d)) != NULL) {
-        if (de->d_name[0] == '.') continue;
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
         char k2[512];
         snprintf(k2, sizeof(k2), "blob.%s", de->d_name);
         if (!is_hex64(de->d_name) || !has_key(k2)) {
@@ -486,6 +509,36 @@ int main(int argc, char **argv) {
         }
     }
     closedir(d);
+    /* Closed file inventory for the bundle root and signatures/ (round 1,
+     * RT-06): nothing else may ride along inside a verified bundle. */
+    {
+        DIR *rd = opendir(bundle);
+        if (!rd) FAIL("BUNDLE_INVALID", 2, "bundle directory unreadable");
+        struct dirent *re;
+        while ((re = readdir(rd)) != NULL) {
+            if (strcmp(re->d_name, ".") == 0 || strcmp(re->d_name, "..") == 0) continue;
+            if (strcmp(re->d_name, "manifest.txt") && strcmp(re->d_name, "SEAL.txt") &&
+                strcmp(re->d_name, "blobs") && strcmp(re->d_name, "signatures")) {
+                closedir(rd);
+                FAIL("BUNDLE_INVALID", 2, "unexpected file %s in bundle root", re->d_name);
+            }
+        }
+        closedir(rd);
+        char sdpath[PATH_MAX];
+        snprintf(sdpath, sizeof(sdpath), "%s/signatures", bundle);
+        DIR *sd = opendir(sdpath);
+        if (sd) {
+            struct dirent *se;
+            while ((se = readdir(sd)) != NULL) {
+                if (strcmp(se->d_name, ".") == 0 || strcmp(se->d_name, "..") == 0) continue;
+                if (strcmp(se->d_name, "ed25519.sig") && strcmp(se->d_name, "signer.txt")) {
+                    closedir(sd);
+                    FAIL("BUNDLE_INVALID", 2, "unexpected file %s in signatures directory", se->d_name);
+                }
+            }
+            closedir(sd);
+        }
+    }
     /* Test records: origins reported, never promoted; association checked. */
     bool any_test = false, any_observed = false;
     for (unsigned long long i = 0; i < ntest; i++) {
@@ -534,6 +587,12 @@ int main(int argc, char **argv) {
                 snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
                 sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
                          "incomplete signature material (need both ed25519.sig and signer.txt)");
+            }
+            if (S_ISLNK(tst.st_mode) || !S_ISREG(tst.st_mode)) {
+                snprintf(g_sig, sizeof(g_sig), "INVALID");
+                snprintf(g_trust, sizeof(g_trust), "UNTRUSTED_SIGNER");
+                sig_fail("SIGNATURE_INVALID", 8, testobs, qnxf,
+                         "signer.txt must be a regular file, not a symlink");
             }
             if (S_ISLNK(sst.st_mode) || !S_ISREG(sst.st_mode) || sst.st_size != 64) {
                 snprintf(g_sig, sizeof(g_sig), "INVALID");

@@ -43,7 +43,7 @@ Los Niveles 0 y 1 estan implementados y probados en el host Linux (`make`, `make
 | 2 | Integracion genuina con QNX SDP 8.0 | BLOCKED — SDP no instalado en el host de desarrollo |
 | 3 | Procedencia autenticada y politicas de confianza | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Evidencia de pruebas y runtime QNX | NOT_STARTED |
-| 5 | Comparacion forense y experiencia de auditoria | NOT_STARTED |
+| 5 | Comparacion forense y experiencia de auditoria | DONE (VERIFIED_HOST_ONLY) |
 | 6 | Seguridad, rendimiento, portabilidad y release | NOT_STARTED |
 | 7 | Experiencia para el jurado | NOT_STARTED |
 

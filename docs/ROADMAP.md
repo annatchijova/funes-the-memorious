@@ -18,7 +18,7 @@ Live status summary:
 | 2 | Genuine QNX SDP 8.0 Build Integration | BLOCKED |
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | NOT_STARTED |
-| 5 | Forensic Comparison and Audit UX | NOT_STARTED |
+| 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
 | 6 | Security, Performance, Portability and Release | NOT_STARTED |
 | 7 | Hackathon Jury Experience | NOT_STARTED |
 
@@ -362,7 +362,14 @@ difference between two bundles from the comparison output alone.
 **Observable demo.** Compare the Level 1 good bundle against its mutated
 twin; the diff names the changed artifact and digest.
 
-**Status: NOT_STARTED.**
+**Status: DONE (`VERIFIED_HOST_ONLY`).** Evidence: `funes compare` verifies
+both bundles with the sibling `funes-verify` before diffing (tampered input
+exits 2 `INVALID_INPUT`), diffs material fields only (source, artifacts,
+tests, argv set, QNX presence flags; timestamps/elapsed/paths ignored),
+exits 0 identical / 10 different, and is covered in the 74-check suite (see
+`docs/STATUS.md`). The optional visual report was not built; the human and
+JSON diffs are the audit UX for this level. Hardened in the same round by
+Red Team Round 1 (`docs/security/RED-TEAM-ROUND-1.md`).
 
 **Non-goals.** Hosted dashboards; editing bundles from the UI.
 
