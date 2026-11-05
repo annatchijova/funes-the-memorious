@@ -130,7 +130,7 @@ Deep design — canonical serialization, hashing rules, trust boundaries, threat
 |---|---|---|
 | Repository foundations | This README, [docs/ROADMAP.md](docs/ROADMAP.md), [docs/engineering/SKILLS-APPLIED.md](docs/engineering/SKILLS-APPLIED.md), `.gitignore`, `LICENSE` | The project's scope, invariants, and level plan are written down and reviewable. |
 | Language decision | Owner directive: C, recorded with alternatives and revisit triggers in [docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md](docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md) | The stack is chosen and the bundle format is language-neutral, so the decision stays reversible. |
-| Collector / verifier / bundle | `make` builds `bin/funes` and `bin/funes-verify` in C; `make test` runs the 41-check host suite; [docs/STATUS.md](docs/STATUS.md) records observed outcomes | Host build/test capture, sealing, tamper detection, and independent verification work on Linux. Nothing about QNX execution follows from this. |
+| Collector / verifier / bundle | `make` builds `bin/funes` and `bin/funes-verify` in C; `make test` runs the 122-check host suite; [docs/STATUS.md](docs/STATUS.md) records observed outcomes | Host build/test capture, sealing, tamper detection, signing/trust reporting, test evidence, and independent verification work on Linux. Nothing about QNX execution follows from this. |
 | QNX integration | Fixture source and setup procedure exist ([docs/QNX-SETUP.md](docs/QNX-SETUP.md)); `funes doctor` reports `NOT_FOUND` on this host | No QNX execution claim can be made. Status: `BLOCKED` / `NOT_RUN`. |
 
 Live status is maintained in [docs/ROADMAP.md](docs/ROADMAP.md) and, from Level 1 onward, in `docs/STATUS.md` generated from real runs. This README will be updated in the same commit as any status change, never ahead of it.
@@ -145,10 +145,10 @@ Full entry/exit criteria, deliverables, threats, and tests per level: [docs/ROAD
 | 1 | Real host capture and independent verification | DONE (`VERIFIED_HOST_ONLY`) |
 | 2 | Genuine QNX SDP 8.0 build integration | BLOCKED — QNX SDP 8.0 not installed on the dev host |
 | 3 | Authenticated provenance and trust policies | DONE (`VERIFIED_HOST_ONLY`) |
-| 4 | Test evidence and QNX runtime | NOT_STARTED |
+| 4 | Test evidence and QNX runtime | PARTIAL (host slice DONE, `VERIFIED_HOST_ONLY`; QEMU/QNX runtime `NOT_RUN`) |
 | 5 | Forensic Comparison and Audit UX | DONE (`VERIFIED_HOST_ONLY`) |
-| 6 | Security, performance, portability and release | NOT_STARTED |
-| 7 | Hackathon jury experience | NOT_STARTED |
+| 6 | Security, performance, portability and release | DONE (`VERIFIED_HOST_ONLY`) |
+| 7 | Hackathon jury experience | PARTIAL ([submission draft](docs/DEVPOST-DRAFT.md) and host demo path; QNX evidence/video URL pending) |
 
 A level is `DONE` only when its exit criteria are met and linked to observed commands or artifacts. A README subsection existing is not evidence.
 
@@ -287,7 +287,7 @@ funes-the-memorious/
 
 ```bash
 make            # build bin/funes and bin/funes-verify (-Wall -Wextra -Werror)
-make test       # 41-check host suite: integration + adversarial cases
+make test       # 122-check host suite: integration + adversarial cases
 make clean
 ```
 

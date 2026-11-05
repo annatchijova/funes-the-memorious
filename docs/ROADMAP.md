@@ -19,8 +19,8 @@ Live status summary:
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | PARTIAL (host slice DONE, VERIFIED_HOST_ONLY; QEMU/QNX runtime NOT_RUN, blocked by Level 2) |
 | 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
-| 6 | Security, Performance, Portability and Release | DONE (fuzzing, resource budgets, timeout/schema regressions, lint/secret-scan/demo-smoke CI, packaged release + limitation matrix; see Level 6 closure note for two honest caveats) |
-| 7 | Hackathon Jury Experience | NOT_STARTED |
+| 6 | Security, Performance, Portability and Release | DONE (fuzzing, resource budgets, timeout/schema regressions, lint/secret-scan/demo-smoke CI, packaged release + limitation matrix; see Level 6 closure note for one honest caveat) |
+| 7 | Hackathon Jury Experience | PARTIAL (host-only submission packet and demo path ready; QNX evidence/video URL pending) |
 
 Status vocabulary: `DONE`, `PARTIAL`, `BLOCKED`, `NOT_STARTED`, plus the
 execution taxonomy `VERIFIED_REAL_QNX`, `VERIFIED_HOST_ONLY`,
@@ -535,7 +535,15 @@ labeled otherwise.
 **Observable demo.** The six-act story: claim → evidence → independent
 verification → mutation → precise finding → stated boundary.
 
-**Status: NOT_STARTED.**
+**Status: PARTIAL (`VERIFIED_HOST_ONLY` for the documented host path).**
+`docs/DEMO.md` is executable end-to-end and `scripts/demo-smoke.sh` asserts its
+claimed observations; `docs/DEVPOST-DRAFT.md` now scopes the public write-up,
+the under-three-minute video, and the QNX evidence boundary to what exists.
+The remaining deliverables are external evidence, not prose substitutes: a
+public video URL recorded from the documented path, submission-form fields,
+and submission-specific QNX evidence that satisfies the event rules. Do not
+promote this level to `DONE` until those
+artifacts exist and the video is checked against the final submission.
 
 **Non-goals.** Polished frontend, cloud infrastructure, blockchain, AI/ML
 scoring, or any certification claim.

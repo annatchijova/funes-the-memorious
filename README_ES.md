@@ -34,7 +34,7 @@ Entre ambos hay un formato publico de paquete que otro ingeniero puede verificar
 
 ## Estado actual
 
-Los Niveles 0 y 1 estan implementados y probados en el host Linux (`make`, `make test` con 41 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
+Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`make`, `make test` con 122 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 4 esta completo en su parte host-only y el Nivel 7 tiene un paquete de submission host-only en preparacion. El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Nivel | Nombre | Estado |
 |---|---|---|
@@ -42,10 +42,10 @@ Los Niveles 0 y 1 estan implementados y probados en el host Linux (`make`, `make
 | 1 | Captura real en host y verificacion independiente | DONE (VERIFIED_HOST_ONLY) |
 | 2 | Integracion genuina con QNX SDP 8.0 | BLOCKED — SDP no instalado en el host de desarrollo |
 | 3 | Procedencia autenticada y politicas de confianza | DONE (VERIFIED_HOST_ONLY) |
-| 4 | Evidencia de pruebas y runtime QNX | NOT_STARTED |
+| 4 | Evidencia de pruebas y runtime QNX | PARTIAL (host slice DONE, `VERIFIED_HOST_ONLY`; QEMU/QNX runtime `NOT_RUN`) |
 | 5 | Comparacion forense y experiencia de auditoria | DONE (VERIFIED_HOST_ONLY) |
-| 6 | Seguridad, rendimiento, portabilidad y release | NOT_STARTED |
-| 7 | Experiencia para el jurado | NOT_STARTED |
+| 6 | Seguridad, rendimiento, portabilidad y release | DONE (`VERIFIED_HOST_ONLY`) |
+| 7 | Experiencia para el jurado | PARTIAL ([borrador de submission](docs/DEVPOST-DRAFT.md) y demo host-only; evidencia QNX/URL de video pendientes) |
 
 ## Limites honestos
 

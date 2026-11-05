@@ -52,5 +52,19 @@ stronger compliance is claimed for them.
 ## Explicit non-compliance / gaps
 
 - `anti-mvp` skill: not found on disk (see above). Fallback principles applied.
-- ADR-001, evidence-bundle spec, threat model, and CI are still owed by
-  Level 0; the roadmap marks Level 0 `PARTIAL` for exactly that reason.
+- At founding, ADR-001, the evidence-bundle spec, the threat model, and CI
+  were still owed by Level 0. Subsequent commits closed those items; current
+  status is maintained in `docs/ROADMAP.md` and `docs/STATUS.md`.
+
+## Level 7 documentation pass
+
+The following skills were read and applied while moving the jury-experience
+level from `NOT_STARTED` to an evidence-scoped `PARTIAL` state:
+
+| Skill | Observable application |
+|---|---|
+| `working-on-main` and `git-discipline` | An annotated pre-session restore tag was created on `main`; no history-rewriting operation was used; state was re-read before reporting. |
+| `software-archaeology`, `audit-before-patch`, and `surgical-patcher` | Stale README claims were confirmed against live roadmap/status files; every existing-file edit used a unique anchored dry run, backup, and post-write verification. |
+| `abductive-engineering`, `falsifiable-testing`, and `red-team-auditing` | The next-level hypothesis and its benign alternative were tested; the host demo's tamper failure and the 122-check suite were re-run; claims are bounded by the observed QNX absence. |
+| `destination-driven-construction`, `pitch-evidence-sequencing`, `cognitive-load-in-pitch-visuals`, and `adversarial-pitch-audit` | The new Devpost draft follows problem → visible mechanism → tamper evidence → boundary, limits the video to one observable journey, and avoids unsupported QNX or safety claims. |
+| `hackathon-demo-production-workflow` | The current official rules were checked before recording guidance was drafted; the document requires a public under-three-minute video and warns against unlicensed media. |
