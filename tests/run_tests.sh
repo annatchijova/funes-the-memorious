@@ -84,6 +84,19 @@ ELAPSED_MS=$(grep "^build.elapsed_ms=" "$TMP/btimeout/manifest.txt" | cut -d= -f
 $VERIFY "$TMP/btimeout" >"$TMP/vtimeout.txt" 2>&1
 expect_exit 0 $? "timed-out bundle still verifies as evidence (killed build is preserved, not hidden)"
 
+echo "== red team round 3: timeout process-tree containment =="
+$FUNES capture --out "$TMP/brt3_timeout" --timeout-sec 1 -- \
+    sh -c "sleep 30 & child=\$!; printf '%s\\n' \"\$child\" > '$TMP/brt3_child.pid'; wait" \
+    >"$TMP/brt3_timeout.log" 2>&1
+CHILD_PID=$(tr -d '\n' <"$TMP/brt3_child.pid")
+sleep 1
+if kill -0 "$CHILD_PID" 2>/dev/null; then
+    kill "$CHILD_PID" 2>/dev/null || true
+    FAIL=$((FAIL + 1)); echo "FAIL: RT3-01 timeout kills command descendants"
+else
+    PASS=$((PASS + 1)); echo "PASS: RT3-01 timeout kills command descendants"
+fi
+
 echo "== tamper: one byte in artifact blob =="
 cp -r "$TMP/b1" "$TMP/b1_tamper_art"
 ABlob="$TMP/b1_tamper_art/blobs/sha256/$ART"
@@ -376,6 +389,13 @@ $FUNES sign --bundle "$TMP/brt5" --key "$TMP/seed1.txt" >"$TMP/signrt5.log" 2>&1
 if [ $? -ne 0 ] && [ "$(cat "$TMP/victim.txt")" = "IMPORTANT-DATA" ]; then
     PASS=$((PASS + 1)); echo "PASS: RT-05 sign refuses symlinked signature file, victim intact"
 else FAIL=$((FAIL + 1)); echo "FAIL: RT-05 sign refuses symlinked signature file, victim intact"; fi
+$FUNES capture --out "$TMP/brt3_sign_dir" -- /bin/true >"$TMP/caprt3sign.log" 2>&1
+mkdir "$TMP/brt3_outside"
+ln -s "$TMP/brt3_outside" "$TMP/brt3_sign_dir/signatures"
+$FUNES sign --bundle "$TMP/brt3_sign_dir" --key "$TMP/seed1.txt" >"$TMP/signrt3dir.log" 2>&1
+if [ $? -ne 0 ] && [ ! -e "$TMP/brt3_outside/ed25519.sig" ] && [ ! -e "$TMP/brt3_outside/signer.txt" ]; then
+    PASS=$((PASS + 1)); echo "PASS: RT3-02 sign refuses symlinked signatures directory"
+else FAIL=$((FAIL + 1)); echo "FAIL: RT3-02 sign refuses symlinked signatures directory"; fi
 cp -r "$TMP/b1" "$TMP/brt6"
 printf 'fake report' >"$TMP/brt6/extra-report.html"
 $VERIFY "$TMP/brt6" >"$TMP/vrt6.txt" 2>&1
@@ -392,6 +412,19 @@ rm -rf "$TMP/brt2c/signatures" 2>/dev/null
 printf 'not a directory' >"$TMP/brt2c/signatures"
 $VERIFY "$TMP/brt2c" >"$TMP/vrt2c.txt" 2>&1
 expect_exit 2 $? "RT-02 follow-up: non-directory signatures rejected"
+
+echo "== red team round 3: manifest grammar containment =="
+INJECTED_ROLE=$(printf 'fixture\ntest.99.origin=OBSERVED')
+$FUNES capture --out "$TMP/brt3_role" --artifact "$TMP/work/app:$INJECTED_ROLE" -- /bin/true >"$TMP/caprt3role.log" 2>&1
+if [ $? -ne 0 ]; then
+    PASS=$((PASS + 1)); echo "PASS: RT3-03 collector rejects artifact role with control bytes"
+else FAIL=$((FAIL + 1)); echo "FAIL: RT3-03 collector rejects artifact role with control bytes"; fi
+cp -r "$TMP/b1" "$TMP/brt3_orphan"
+printf 'test.99.origin=OBSERVED\n' >>"$TMP/brt3_orphan/manifest.txt"
+NEWSEAL=$(sha256sum "$TMP/brt3_orphan/manifest.txt" | cut -d' ' -f1)
+printf '%s  manifest.txt\n' "$NEWSEAL" >"$TMP/brt3_orphan/SEAL.txt"
+$VERIFY "$TMP/brt3_orphan" >"$TMP/vrt3orphan.txt" 2>&1
+expect_exit 2 $? "RT3-03 verifier rejects out-of-range indexed key"
 
 echo "== level 4: test evidence =="
 mkdir -p "$TMP/l4work"

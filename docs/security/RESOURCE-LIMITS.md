@@ -22,7 +22,7 @@ breach, and where that behavior is tested.
 |---|---|---|---|---|
 | Captured stdout/stderr per stream | `MAX_CAPTURE_BYTES` = 1 MiB | `run_capture()`, while reading the child's pipes | Truncated, flagged (`*.truncated=1`), never silently hidden — the bundle still seals and verifies | `tests/run_tests.sh` "truncation is flagged" |
 | Imported JSON test-report file size | `MAX_TEST_REPORT_BYTES` = 1 MiB | `parse_json_report()`, via `stat` **before** any read (stat-first discipline, same pattern as the verifier's blob check below) | `die()`, nothing written to the bundle | `tests/run_tests.sh` Level 4 JSON section, "oversized report fixture exceeds 1 MiB cap" |
-| Command wall-clock time | `DEFAULT_TIMEOUT_SEC` = 120s, overridable via `--timeout-sec` | `run_capture()`'s poll loop; sends `SIGKILL` on expiry | Child killed; exit/signal/elapsed recorded verbatim, build/test evidence preserved as a killed run, not hidden | `tests/run_tests.sh` "timeout enforcement" (closed in this pass — carried from Level 1, see below) |
+| Command wall-clock time | `DEFAULT_TIMEOUT_SEC` = 120s, overridable via `--timeout-sec` | `run_capture()`'s poll loop; sends `SIGKILL` to the command process group on expiry | Exit/signal/elapsed recorded verbatim, build/test evidence preserved as a killed run, not hidden | `tests/run_tests.sh` timeout and Red Team Round 3 descendant-containment regressions |
 
 **Carried-forward item now closed:** Level 1's own closure note and Red
 Team Round 1's recommendations both named "dedicated timeout regression in

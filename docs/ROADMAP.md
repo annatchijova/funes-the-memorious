@@ -485,7 +485,7 @@ real run, in the previous pass, found an actual heap-use-after-free bug
 within seconds; the `lint` and `secret-scan` jobs found nothing further,
 confirming the local verification held up under the real environment too,
 not just assumed to. Suite:
-122/122, zero warnings under `-Werror`.
+126/126, zero warnings under `-Werror`.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 

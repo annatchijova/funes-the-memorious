@@ -109,6 +109,13 @@ static bool is_hex64(const char *s) {
     return true;
 }
 
+static bool is_role_token(const char *s) {
+    if (!s || !*s) return false;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++)
+        if (!(isalnum(*p) || *p == '.' || *p == '_' || *p == '-')) return false;
+    return true;
+}
+
 /* List of manifest lines (without header), sorted before writing. */
 typedef struct { char **lines; size_t count, cap; } linelist;
 
@@ -324,6 +331,7 @@ static void run_capture(char *const argv[], int timeout_sec, long long epoch_ove
     pid_t pid = fork();
     if (pid < 0) die("fork failed: %s", strerror(errno));
     if (pid == 0) {
+        if (setpgid(0, 0) != 0) _exit(127);
         dup2(out_pipe[1], STDOUT_FILENO);
         dup2(err_pipe[1], STDERR_FILENO);
         close(out_pipe[0]); close(out_pipe[1]);
@@ -332,6 +340,8 @@ static void run_capture(char *const argv[], int timeout_sec, long long epoch_ove
         fprintf(stderr, "funes: cannot execute %s: %s\n", argv[0], strerror(errno));
         _exit(127);
     }
+    if (setpgid(pid, pid) != 0 && errno != EACCES && errno != ESRCH)
+        die("cannot isolate command process group: %s", strerror(errno));
     close(out_pipe[1]);
     close(err_pipe[1]);
     fcntl(out_pipe[0], F_SETFL, O_NONBLOCK);
@@ -344,7 +354,8 @@ static void run_capture(char *const argv[], int timeout_sec, long long epoch_ove
         long elapsed = (long)((now.tv_sec - mono_start.tv_sec) * 1000 +
                               (now.tv_nsec - mono_start.tv_nsec) / 1000000);
         if (timeout_sec > 0 && elapsed > (long)timeout_sec * 1000) {
-            kill(pid, SIGKILL);
+            if (kill(-pid, SIGKILL) != 0 && errno != ESRCH)
+                die("cannot kill command process group: %s", strerror(errno));
             break;
         }
         struct pollfd fds[2];
@@ -633,12 +644,17 @@ static int cmd_sign(int argc, char **argv) {
     char sdir[PATH_MAX];
     snprintf(sdir, sizeof(sdir), "%s/signatures", bundle);
     if (mkdir(sdir, 0755) != 0 && errno != EEXIST) die("cannot create %s: %s", sdir, strerror(errno));
-    /* O_NOFOLLOW writes: a pre-planted symlink in the bundle must not turn
-     * signing into an overwrite of an outside file (round 1, RT-05). */
-    char sigpath[PATH_MAX + 64];
-    snprintf(sigpath, sizeof(sigpath), "%s/ed25519.sig", sdir);
-    int sfd = open(sigpath, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
-    if (sfd < 0) die("cannot write signature %s: %s", sigpath, strerror(errno));
+    /* O_NOFOLLOW on a final filename cannot protect an intermediate
+     * signatures/ symlink. Bind output to a non-symlink directory fd. */
+    int sdirfd = open(sdir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (sdirfd < 0) die("cannot open signatures directory %s: %s", sdir, strerror(errno));
+    struct stat sdst;
+    if (fstat(sdirfd, &sdst) != 0 || !S_ISDIR(sdst.st_mode)) {
+        close(sdirfd);
+        die("signatures is not a regular directory");
+    }
+    int sfd = openat(sdirfd, "ed25519.sig", O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+    if (sfd < 0) { close(sdirfd); die("cannot write ed25519.sig: %s", strerror(errno)); }
     FILE *sf = fdopen(sfd, "wb");
     if (!sf) { close(sfd); die("cannot write signature: %s", strerror(errno)); }
     if (fwrite(sig, 1, 64, sf) != 64) { fclose(sf); die("short write on signature"); }
@@ -646,14 +662,13 @@ static int cmd_sign(int argc, char **argv) {
     char pkhex[65], fp[65];
     hex_encode_bytes(pk, 32, pkhex);
     pubkey_fingerprint(pk, fp);
-    char txtpath[PATH_MAX + 64];
-    snprintf(txtpath, sizeof(txtpath), "%s/signer.txt", sdir);
-    int tfd = open(txtpath, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
-    if (tfd < 0) die("cannot write signer.txt %s: %s", txtpath, strerror(errno));
+    int tfd = openat(sdirfd, "signer.txt", O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+    if (tfd < 0) { close(sdirfd); die("cannot write signer.txt: %s", strerror(errno)); }
     FILE *tf = fdopen(tfd, "wb");
     if (!tf) { close(tfd); die("cannot write signer.txt: %s", strerror(errno)); }
     fprintf(tf, "algorithm=ed25519\nmanifest_sha256=%s\npayload_domain=FUNES-SIGN-1\nsigner_fingerprint_sha256=%s\nsigner_pubkey_hex=%s\n", mdigest, fp, pkhex);
     if (fclose(tf) != 0) die("cannot close signer.txt: %s", strerror(errno));
+    if (close(sdirfd) != 0) die("cannot close signatures directory: %s", strerror(errno));
     printf("signed bundle %s manifest_sha256=%s signer_fingerprint_sha256=%s\n", bundle, mdigest, fp);
     printf("note: a valid signature proves control of this key, not that any execution occurred.\n");
     return 0;
@@ -743,7 +758,11 @@ static int cmd_capture(int argc, char **argv) {
             sources[nsrc++] = argv[++i];
         } else if (strcmp(argv[i], "--artifact") == 0 && i + 1 < argc) {
             if (nart >= 128) die("too many --artifact files (max 128)");
-            arts[nart++] = argv[++i];
+            const char *spec = argv[++i];
+            const char *colon = strrchr(spec, ':');
+            if (!colon || colon == spec || !is_role_token(colon + 1))
+                die("capture: --artifact must be PATH:ROLE with a token role, got %s", spec);
+            arts[nart++] = spec;
         } else if (strcmp(argv[i], "--timeout-sec") == 0 && i + 1 < argc) timeout_sec = atoi(argv[++i]);
         else if (strcmp(argv[i], "--epoch") == 0 && i + 1 < argc) epoch = atoll(argv[++i]);
         else die("capture: unknown or incomplete option %s", argv[i]);
@@ -814,7 +833,8 @@ static int cmd_capture(int argc, char **argv) {
     ll_printf(&l, "artifact_count=%d", nart);
     for (int a = 0; a < nart; a++) {
         const char *colon = strrchr(arts[a], ':');
-        if (!colon || colon == arts[a] || !colon[1]) die("capture: --artifact must be PATH:ROLE, got %s", arts[a]);
+        if (!colon || colon == arts[a] || !is_role_token(colon + 1))
+            die("capture: --artifact must be PATH:ROLE with a token role, got %s", arts[a]);
         char apath[PATH_MAX];
         size_t plen = (size_t)(colon - arts[a]);
         if (plen >= sizeof(apath)) die("capture: artifact path too long");

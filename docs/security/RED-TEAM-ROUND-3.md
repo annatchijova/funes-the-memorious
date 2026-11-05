@@ -175,7 +175,7 @@ verified separately.
 
 | Vector | Result | Why |
 |---|---|---|
-| AddressSanitizer and UndefinedBehaviorSanitizer full suite | INCONCLUSIVE | LeakSanitizer exits before the program runs because this environment is traced; the standard build immediately passes all 122 checks. This is not evidence of a code defect or of sanitizer cleanliness. |
+| AddressSanitizer and UndefinedBehaviorSanitizer full suite | INCONCLUSIVE | LeakSanitizer exits before the program runs because this environment is traced; the standard build passes all 126 checks. This is not evidence of a code defect or of sanitizer cleanliness. |
 | “`O_NOFOLLOW` protects the signing path” | FALSIFIED | It protects only the final filename. RT3-02 demonstrated that an intermediate directory symlink is still followed. |
 | “The timeout kills every process created by the command” | FALSIFIED | RT3-01 demonstrated that only the direct child is signaled. |
 | “Allowed indexed keys are necessarily in range” | FALSIFIED | RT3-03 demonstrated that `test.99.*` remains outside `test_count=0` while verification succeeds. |
@@ -193,6 +193,13 @@ verified separately.
    within its corresponding declared count, and reject gaps/extra keys for
    every indexed family.
 
-No remediation is included in this audit record. Each fix needs a dedicated
-regression that reproduces the pre-fix failure and proves the post-fix
-behavior.
+## Remediation result
+
+The audited base remains intentionally preserved above. Remediation was applied
+after the red-first regressions failed and was then re-induced successfully:
+
+| Finding | Remediation | Evidence |
+|---|---|---|
+| RT3-01 | The collector creates a dedicated process group and signals that group on timeout. | The descendant-containment regression passes. |
+| RT3-02 | Signing opens `signatures/` with `O_DIRECTORY|O_NOFOLLOW` and writes both files with `openat`. | A symlinked `signatures/` directory is refused; no external files are created. |
+| RT3-03 | Artifact roles are restricted to grammar tokens; the verifier rejects every indexed key outside its declared collection. | Control-byte role and resealed `test.99.*` regressions both fail closed. |

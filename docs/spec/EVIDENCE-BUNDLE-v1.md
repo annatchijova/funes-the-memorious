@@ -61,7 +61,7 @@ SHA-256 digest; the manifest never trusts a stored filename beyond that.
 | `source.git_dirty` | `1` if `git status --porcelain` was non-empty at capture. |
 | `source.file_count`, `source.file.<n>.path.hex`, `source.file.<n>.sha256` | Explicit source set hashed by the collector, sorted by path bytes. |
 | `source.digest` | SHA-256 over the concatenation, in sorted order, of `<sha256><space><space><path.hex>\n` lines; `NONE` when the set is empty. |
-| `artifact_count`, `artifact.<n>.name.hex`, `artifact.<n>.role`, `artifact.<n>.sha256`, `artifact.<n>.size` | Output artifacts hashed after the build. `role` is a token such as `target-executable`, `test-report`, `compiler-log`. Each artifact's bytes are stored as a blob. |
+| `artifact_count`, `artifact.<n>.name.hex`, `artifact.<n>.role`, `artifact.<n>.sha256`, `artifact.<n>.size` | Output artifacts hashed after the build. `role` is a non-empty ASCII token containing only letters, digits, `.`, `_`, and `-`, such as `target-executable`, `test-report`, or `compiler-log`. Each artifact's bytes are stored as a blob. |
 | `env.host_os`, `env.host_arch` | `uname` system and machine strings (hex-encoded as `*.hex` values under keys `env.host_os.hex`, `env.host_arch.hex`). |
 | `qnx.host_present`, `qnx.target_present` | `1` if `QNX_HOST`/`QNX_TARGET` were set (values are never stored), else `0`. |
 

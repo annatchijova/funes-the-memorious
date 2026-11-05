@@ -268,6 +268,31 @@ static bool indexed_ok(const char *key, const char *prefix, const char *const *t
     return false;
 }
 
+static bool indexed_key_index(const char *key, const char *prefix, unsigned long long *out) {
+    if (!starts(key, prefix)) return false;
+    const char *p = key + strlen(prefix);
+    if (*p < '0' || *p > '9') return false;
+    unsigned long long index = 0;
+    while (*p >= '0' && *p <= '9') {
+        unsigned digit = (unsigned)(*p - '0');
+        if (index > (ULLONG_MAX - digit) / 10) return false;
+        index = index * 10 + digit;
+        p++;
+    }
+    if (*p != '.') return false;
+    *out = index;
+    return true;
+}
+
+static void reject_out_of_range_index(const char *key, const char *prefix,
+                                      unsigned long long count, const char *family) {
+    unsigned long long index;
+    if (!indexed_key_index(key, prefix, &index))
+        FAIL("BUNDLE_INVALID", 2, "malformed indexed key %s", key);
+    if (index >= count)
+        FAIL("BUNDLE_INVALID", 2, "%s key %s is outside declared count %llu", family, key, count);
+}
+
 static bool key_allowed(const char *k) {
     static const char *exact[] = {
         "schema_version", "build.origin", "build.argv_count", "build.cwd.hex",
@@ -507,9 +532,28 @@ int main(int argc, char **argv) {
     }
     if (!is_hex64(get_val("build.stdout_sha256")) || !is_hex64(get_val("build.stderr_sha256")))
         FAIL("BUNDLE_INVALID", 2, "build stdout/stderr digest malformed");
+    unsigned long long nsrc = req_u64("source.file_count");
     unsigned long long nart = req_u64("artifact_count");
     unsigned long long ntest = req_u64("test_count");
-    if (nart > 1024 || ntest > 1024) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "artifact/test count too large");
+    if (nsrc > 128 || nart > 1024 || ntest > 1024)
+        FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "source/artifact/test count too large");
+    unsigned long long nexp = has_key("expected_test_count") ? req_u64("expected_test_count") : 0;
+    if (nexp > 1024) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "expected_test_count too large");
+    for (size_t i = 0; i < g_count; i++) {
+        const char *key = g_entries[i].key;
+        if (starts(key, "build.argv.")) reject_out_of_range_index(key, "build.argv.", argc_b, "build argv");
+        else if (starts(key, "source.file.")) reject_out_of_range_index(key, "source.file.", nsrc, "source file");
+        else if (starts(key, "artifact.")) reject_out_of_range_index(key, "artifact.", nart, "artifact");
+        else if (starts(key, "expected_test.")) reject_out_of_range_index(key, "expected_test.", nexp, "expected test");
+        else if (starts(key, "test.")) reject_out_of_range_index(key, "test.", ntest, "test");
+    }
+    for (unsigned long long i = 0; i < nsrc; i++) {
+        char k[128];
+        snprintf(k, sizeof(k), "source.file.%llu.path.hex", i);
+        require_key(k);
+        snprintf(k, sizeof(k), "source.file.%llu.sha256", i);
+        require_key(k);
+    }
     /* Collect artifact digests for test association checks. */
     char (*art_digests)[65] = xmalloc((nart ? nart : 1) * 65);
     for (unsigned long long i = 0; i < nart; i++) {
