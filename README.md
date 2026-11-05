@@ -1,4 +1,4 @@
-English · [Español](README_ES.md) · [Technical README](docs/architecture/ARCHITECTURE.md)
+English · [Español](README_ES.md) · [Showcase](showcase/index.html) · [Technical README](docs/architecture/ARCHITECTURE.md)
 
 # FUNES THE MEMORIOUS
 

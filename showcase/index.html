@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Funes the Memorious — evidence that a build and test claim can be challenged.">
+    <title>Funes the Memorious — Evidence, not recollection</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#proof">Skip to the proof</a>
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="Funes the Memorious home">
+        <span class="wordmark-mark" aria-hidden="true">F</span>
+        <span>FUNES <em>THE MEMORIOUS</em></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#proof">The proof</a>
+        <a href="#workflow">How it works</a>
+        <a href="#watch">Watch</a>
+        <a class="nav-cta" href="../docs/DEMO.md">Run the demo <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-media" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+        <div class="hero-content">
+          <p class="eyebrow"><span class="pulse-dot" aria-hidden="true"></span> QNX developer tooling · host evidence</p>
+          <h1 id="hero-title">A passing build<br>is a claim.<br><span>Make it challengeable.</span></h1>
+          <p class="hero-copy">Funes captures what was built and tested, seals it into evidence, and lets an independent verifier challenge every byte — offline.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#proof">Challenge the evidence <span aria-hidden="true">↓</span></a>
+            <a class="button button-quiet" href="../docs/DEVPOST-DRAFT.md">Read the project brief <span aria-hidden="true">↗</span></a>
+          </div>
+          <dl class="hero-facts" aria-label="Verified host facts">
+            <div><dt>122</dt><dd>host checks passed</dd></div>
+            <div><dt>1 byte</dt><dd>is enough to fail verification</dd></div>
+            <div><dt>0</dt><dd>network calls to verify</dd></div>
+          </dl>
+        </div>
+        <p class="hero-caption">Concept visual — a metaphor for tamper-evident evidence, not a recorded software result.</p>
+      </section>
+
+      <section class="statement" aria-label="Project promise">
+        <p class="statement-label">The problem</p>
+        <p>“It passed” tells a reviewer almost nothing. Funes records the source state, command, artifact, output, and observed test result needed to challenge that sentence.</p>
+      </section>
+
+      <section class="proof-section" id="proof" aria-labelledby="proof-title">
+        <div class="section-intro">
+          <p class="eyebrow">01 / The proof, not the promise</p>
+          <h2 id="proof-title">Change one byte.<br>Watch trust disappear.</h2>
+          <p>This is a faithful visual replay of the documented host-only mutation exercise. It does not simulate QNX execution.</p>
+        </div>
+
+        <div class="evidence-console" data-console>
+          <div class="console-topbar">
+            <div class="console-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <p>OFFLINE VERIFIER / evidence.bundle</p>
+            <span class="console-mode">READ ONLY</span>
+          </div>
+          <div class="console-grid">
+            <article class="bundle-card">
+              <p class="card-kicker">Recorded artifact</p>
+              <div class="artifact-orbit" aria-hidden="true"><span></span><span></span><b>SHA</b></div>
+              <p class="artifact-name">host-hello/app</p>
+              <p class="hash" data-hash>5ca2…67fd0ba72</p>
+              <p class="bundle-note">observed build + observed self-test</p>
+            </article>
+            <article class="verdict-card" aria-live="polite">
+              <p class="card-kicker">Verifier result</p>
+              <p class="verdict-label" data-verdict-label>INTEGRITY_VALID</p>
+              <p class="verdict-copy" data-verdict-copy>Every recorded blob still matches the sealed manifest.</p>
+              <dl class="verdict-fields">
+                <div><dt>artifact</dt><dd data-artifact-state>VALID</dd></div>
+                <div><dt>test observation</dt><dd>OBSERVED</dd></div>
+                <div><dt>network</dt><dd>OFFLINE</dd></div>
+              </dl>
+            </article>
+          </div>
+          <div class="console-actions">
+            <div><span class="console-prompt" aria-hidden="true">$</span> <span data-command>funes-verify evidence.bundle</span></div>
+            <button class="button button-danger" type="button" data-mutate>Mutate one byte <span aria-hidden="true">+</span></button>
+            <button class="text-button" type="button" data-reset hidden>Reset evidence</button>
+          </div>
+        </div>
+        <p class="proof-footnote"><strong>What this proves:</strong> the bundle detects a post-capture change. <strong>What it does not prove:</strong> software safety, host honesty, or an unobserved QNX run.</p>
+      </section>
+
+      <section class="workflow-section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-intro compact">
+          <p class="eyebrow">02 / A compact chain of custody</p>
+          <h2 id="workflow-title">The evidence has a path.<br>So does the doubt.</h2>
+        </div>
+        <ol class="evidence-path">
+          <li><span class="path-index">01</span><div><h3>Observe</h3><p>Run explicit build and test commands under collection.</p></div></li>
+          <li><span class="path-index">02</span><div><h3>Seal</h3><p>Bind artifacts, output, and metadata into a versioned evidence bundle.</p></div></li>
+          <li><span class="path-index">03</span><div><h3>Verify</h3><p>A separate offline binary recomputes hashes from raw bytes.</p></div></li>
+          <li><span class="path-index">04</span><div><h3>Challenge</h3><p>Any altered byte produces a precise, non-zero failure.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="watch-section" id="watch" aria-labelledby="watch-title">
+        <div class="watch-copy">
+          <p class="eyebrow">03 / Three minutes, one journey</p>
+          <h2 id="watch-title">Show the claim.<br>Then break it.</h2>
+          <p>The final submission video will follow the same visible chain: build, capture, verify, mutate, fail. No cinematic claim replaces the actual terminal proof.</p>
+          <a class="button button-primary" href="../docs/DEMO.md">Open the runnable demo <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="video-shell" aria-label="Reserved video slot">
+          <div class="video-grid" aria-hidden="true"></div>
+          <video class="demo-video" data-demo-video controls playsinline preload="metadata" hidden>
+            <source src="assets/video/funes-proof.mp4" type="video/mp4">
+            Your browser does not support embedded video.
+          </video>
+          <div class="video-placeholder">
+            <span class="play-mark" aria-hidden="true">▶</span>
+            <p>Video slot reserved</p>
+            <small>Replace <code>assets/video/funes-proof.mp4</code> after recording the verified demo.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="boundary-section" aria-labelledby="boundary-title">
+        <p class="eyebrow">Honest boundary</p>
+        <h2 id="boundary-title">Evidence integrity is not software safety.</h2>
+        <p>Funes makes a build-and-test claim inspectable. It never upgrades a hash match into a safety certification, a signature into proof of execution, or a host run into a QNX result.</p>
+        <a href="../docs/LIMITATIONS.md">Read the limitations <span aria-hidden="true">↗</span></a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>FUNES THE MEMORIOUS <span>—</span> Evidence, not recollection.</p>
+      <p><a href="../README.md">Repository</a> · <a href="../docs/STATUS.md">Observed status</a> · <a href="../docs/DEMO.md">Demo</a></p>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>
