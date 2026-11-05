@@ -28,6 +28,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#endif
+
 #define MAX_CAPTURE_BYTES (1024u * 1024u)
 #define MAX_TEST_REPORT_BYTES (1024u * 1024u)
 #define DEFAULT_TIMEOUT_SEC 120
@@ -318,6 +325,29 @@ static void buf_append(uint8_t **buf, size_t *len, const uint8_t *data, size_t n
     *len += take;
 }
 
+/* Descendants inherit this filter. Once the collector has placed the command
+ * in its own process group, the command cannot use setsid/setpgid to leave
+ * the timeout boundary (RT3-04). */
+static void lock_command_process_group(void) {
+#ifdef __linux__
+    struct sock_filter filter[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, (unsigned)offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_setsid, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_setpgid, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog program = {
+        .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
+        .filter = filter,
+    };
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 ||
+        prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) != 0)
+        _exit(127);
+#endif
+}
+
 /* Supervised execution: argv only, no shell. Drains pipes past the cap. */
 static void run_capture(char *const argv[], int timeout_sec, long long epoch_override,
                         capture_result *r) {
@@ -332,6 +362,7 @@ static void run_capture(char *const argv[], int timeout_sec, long long epoch_ove
     if (pid < 0) die("fork failed: %s", strerror(errno));
     if (pid == 0) {
         if (setpgid(0, 0) != 0) _exit(127);
+        lock_command_process_group();
         dup2(out_pipe[1], STDOUT_FILENO);
         dup2(err_pipe[1], STDERR_FILENO);
         close(out_pipe[0]); close(out_pipe[1]);

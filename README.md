@@ -60,7 +60,7 @@ diverged. That mutation exercise — not a green checkmark — is the core
 property to inspect.
 
 **Current status:** Levels 0, 1, 3, 5, and 6 are implemented and tested on
-the Linux host (`VERIFIED_HOST_ONLY`, 126-check suite; see
+the Linux host (`VERIFIED_HOST_ONLY`, 127-check suite; see
 [docs/STATUS.md](docs/STATUS.md)). QNX integration (Level 2) is `BLOCKED`:
 no QNX SDP is installed on the development host, and no QNX result is claimed.
 
@@ -129,7 +129,7 @@ Deep design — canonical serialization, hashing rules, trust boundaries, threat
 |---|---|---|
 | Repository foundations | This README, [docs/ROADMAP.md](docs/ROADMAP.md), [docs/engineering/SKILLS-APPLIED.md](docs/engineering/SKILLS-APPLIED.md), `.gitignore`, `LICENSE` | The project's scope, invariants, and level plan are written down and reviewable. |
 | Language decision | Owner directive: C, recorded with alternatives and revisit triggers in [docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md](docs/architecture/ADR-001-LANGUAGE-AND-TARGETS.md) | The stack is chosen and the bundle format is language-neutral, so the decision stays reversible. |
-| Collector / verifier / bundle | `make` builds `bin/funes` and `bin/funes-verify` in C; `make test` runs the 126-check host suite; [docs/STATUS.md](docs/STATUS.md) records observed outcomes | Host build/test capture, sealing, tamper detection, signing/trust reporting, test evidence, and independent verification work on Linux. Nothing about QNX execution follows from this. |
+| Collector / verifier / bundle | `make` builds `bin/funes` and `bin/funes-verify` in C; `make test` runs the 127-check host suite; [docs/STATUS.md](docs/STATUS.md) records observed outcomes | Host build/test capture, sealing, tamper detection, signing/trust reporting, test evidence, and independent verification work on Linux. Nothing about QNX execution follows from this. |
 | QNX integration | Fixture source and setup procedure exist ([docs/QNX-SETUP.md](docs/QNX-SETUP.md)); `funes doctor` reports `NOT_FOUND` on this host | No QNX execution claim can be made. Status: `BLOCKED` / `NOT_RUN`. |
 
 Live status is maintained in [docs/ROADMAP.md](docs/ROADMAP.md) and, from Level 1 onward, in `docs/STATUS.md` generated from real runs. This README will be updated in the same commit as any status change, never ahead of it.
@@ -270,7 +270,7 @@ funes-the-memorious/
 
 ```bash
 make            # build bin/funes and bin/funes-verify (-Wall -Wextra -Werror)
-make test       # 126-check host suite: integration + adversarial cases
+make test       # 127-check host suite: integration + adversarial cases
 make clean
 ```
 

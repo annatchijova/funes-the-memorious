@@ -96,6 +96,17 @@ if kill -0 "$CHILD_PID" 2>/dev/null; then
 else
     PASS=$((PASS + 1)); echo "PASS: RT3-01 timeout kills command descendants"
 fi
+$FUNES capture --out "$TMP/brt3_setsid" --timeout-sec 1 -- \
+    sh -c "setsid sleep 30 & child=\$!; printf '%s\\n' \"\$child\" > '$TMP/brt3_setsid.pid'; wait" \
+    >"$TMP/brt3_setsid.log" 2>&1
+SETSID_PID=$(tr -d '\n' <"$TMP/brt3_setsid.pid")
+sleep 1
+if kill -0 "$SETSID_PID" 2>/dev/null; then
+    kill "$SETSID_PID" 2>/dev/null || true
+    FAIL=$((FAIL + 1)); echo "FAIL: RT3-04 timeout blocks session escape"
+else
+    PASS=$((PASS + 1)); echo "PASS: RT3-04 timeout blocks session escape"
+fi
 
 echo "== tamper: one byte in artifact blob =="
 cp -r "$TMP/b1" "$TMP/b1_tamper_art"

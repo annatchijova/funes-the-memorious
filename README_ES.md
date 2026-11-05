@@ -33,7 +33,7 @@ Entre ambos hay un formato publico de paquete que otro ingeniero puede verificar
 
 ## Estado actual
 
-Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`make`, `make test` con 126 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 4 esta completo en su parte host-only. El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
+Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`make`, `make test` con 127 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 4 esta completo en su parte host-only. El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Nivel | Nombre | Estado |
 |---|---|---|
