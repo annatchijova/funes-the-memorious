@@ -68,3 +68,12 @@ level from `NOT_STARTED` to an evidence-scoped `PARTIAL` state:
 | `abductive-engineering`, `falsifiable-testing`, and `red-team-auditing` | The next-level hypothesis and its benign alternative were tested; the host demo's tamper failure and the 122-check suite were re-run; claims are bounded by the observed QNX absence. |
 | `destination-driven-construction`, `pitch-evidence-sequencing`, `cognitive-load-in-pitch-visuals`, and `adversarial-pitch-audit` | The new Devpost draft follows problem → visible mechanism → tamper evidence → boundary, limits the video to one observable journey, and avoids unsupported QNX or safety claims. |
 | `hackathon-demo-production-workflow` | The current official rules were checked before recording guidance was drafted; the document requires a public under-three-minute video and warns against unlicensed media. |
+
+## Showcase frontend pass
+
+| Skill | Observable application |
+|---|---|
+| `imagegen` | Generated the non-evidentiary evidence-capsule hero image, then converted it to an 88 KB WebP asset under `showcase/assets/images/`. |
+| `frontend-component-boundaries`, `frontend-accessibility-by-construction`, and `resilient-ui-states` | The static UI isolates the mutation interaction, uses native buttons, focus-visible styles, a skip link, and an explicit empty state for the missing video. |
+| `frontend-performance-budgets` | The showcase has no framework, web-font, or third-party-script cost; its only above-the-fold image is WebP and the video slot reserves a 16:9 layout. |
+| `cognitive-load-in-pitch-visuals` and `pitch-evidence-sequencing` | The page presents one journey: claim → observed evidence → mutation → precise failure → stated boundary. Generated media is labeled concept material, not evidence. |
