@@ -19,7 +19,7 @@ OUT="funes-$SHA"
 rm -rf "/tmp/$OUT"
 mkdir -p "/tmp/$OUT"
 
-cp bin/funes bin/funes-verify README.md LICENSE docs/DEMO.md docs/LIMITATIONS.md "/tmp/$OUT/"
+cp bin/funes bin/funes-verify README.md LICENSE docs/LIMITATIONS.md "/tmp/$OUT/"
 
 OUTDIR="dist"
 mkdir -p "$OUTDIR"

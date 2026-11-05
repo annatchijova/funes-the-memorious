@@ -6,8 +6,6 @@ const verdictCopy = document.querySelector('[data-verdict-copy]');
 const artifactState = document.querySelector('[data-artifact-state]');
 const hash = document.querySelector('[data-hash]');
 const command = document.querySelector('[data-command]');
-const demoVideo = document.querySelector('[data-demo-video]');
-const videoPlaceholder = document.querySelector('.video-placeholder');
 
 function showMutation() {
   consolePanel.classList.add('is-breached');
@@ -33,8 +31,3 @@ function resetEvidence() {
 
 mutateButton.addEventListener('click', showMutation);
 resetButton.addEventListener('click', resetEvidence);
-
-demoVideo.addEventListener('canplay', () => {
-  demoVideo.hidden = false;
-  videoPlaceholder.hidden = true;
-});

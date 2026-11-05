@@ -76,14 +76,3 @@ jobs:
           chmod +x gitleaks
       - name: Scan full git history for secrets
         run: ./gitleaks detect --source . -v
-
-  # Documentation smoke test (Level 6): runs docs/DEMO.md's commands
-  # verbatim and asserts the specific outcomes the doc claims (a tampered
-  # bundle exiting non-zero is correct behavior, not a CI failure -- see
-  # scripts/demo-smoke.sh).
-  demo-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run docs/DEMO.md verbatim and check its stated outcomes
-        run: sh scripts/demo-smoke.sh

@@ -10,9 +10,8 @@ parser; the bundle format itself is language-neutral and survives a rewrite)
 - The owner directed C for this project. That directive is the primary force
   and is recorded honestly as such, not retrofitted into a purely technical
   narrative.
-- The product is a Linux-hosted developer tool for QNX 8.0 development
-  (QNX Global Hackathon 2026, Developer Tooling & Host Tools). The host
-  binaries run on Linux; they never run inside QNX.
+- The product is a Linux-hosted developer tool for QNX 8.0 development.
+  The host binaries run on Linux; they never run inside QNX.
 - The verifier must be independently implementable and auditable: a small
   binary with no language-runtime dependency is easier for a reviewer to
   inspect, rebuild, and run offline.

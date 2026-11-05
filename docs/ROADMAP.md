@@ -1,7 +1,6 @@
 # Roadmap — Construction Levels
 
 FUNES THE MEMORIOUS — Linux-hosted build/test provenance for QNX 8.0, in C.
-Competition: QNX Global Hackathon 2026, Developer Tooling & Host Tools.
 
 This roadmap is a construction program, not a wishlist. Each level states a
 problem, concrete deliverables, threats addressed, tests, and entry/exit
@@ -19,8 +18,7 @@ Live status summary:
 | 3 | Authenticated Provenance and Trust Policies | DONE (VERIFIED_HOST_ONLY) |
 | 4 | Test Evidence and QNX Runtime | PARTIAL (host slice DONE, VERIFIED_HOST_ONLY; QEMU/QNX runtime NOT_RUN, blocked by Level 2) |
 | 5 | Forensic Comparison and Audit UX | DONE (VERIFIED_HOST_ONLY) |
-| 6 | Security, Performance, Portability and Release | DONE (fuzzing, resource budgets, timeout/schema regressions, lint/secret-scan/demo-smoke CI, packaged release + limitation matrix; see Level 6 closure note for one honest caveat) |
-| 7 | Hackathon Jury Experience | PARTIAL (host-only submission packet and demo path ready; QNX evidence/video URL pending) |
+| 6 | Security, Performance, Portability and Release | DONE (fuzzing, resource budgets, timeout/schema regressions, lint/secret-scan CI, packaged release + limitation matrix; see Level 6 closure note for one honest caveat) |
 
 Status vocabulary: `DONE`, `PARTIAL`, `BLOCKED`, `NOT_STARTED`, plus the
 execution taxonomy `VERIFIED_REAL_QNX`, `VERIFIED_HOST_ONLY`,
@@ -154,9 +152,8 @@ implementation (small public-domain-style or OS-provided, decided in ADR).
 under observation; the bundle verifies independently; a one-byte mutation
 produces a non-zero, artifact-specific failure. All without any QNX SDK.
 
-**Observable demo.** Host-only scenario, labeled `VERIFIED_HOST_ONLY`:
-build fixture → test → seal → verify → mutate → verify fails. Scripted in
-`docs/DEMO.md` and executed verbatim on the development host.
+**Observable result.** Host-only scenario, labeled `VERIFIED_HOST_ONLY`:
+build fixture → test → seal → verify → mutate → verify fails.
 
 **Status: DONE (`VERIFIED_HOST_ONLY`).** Evidence: `make test` reports
 `pass=41 fail=0` (see `docs/STATUS.md`), covering real gcc capture, observed
@@ -468,13 +465,8 @@ positives cppcheck could not see past without it), several genuine
 const-correctness fixes, and two true false positives suppressed inline
 with a one-line reason each (grep `cppcheck-suppress` in `src/`/
 `verifier/`); a `secret-scan` CI job scanning full git history, verified
-clean locally (11 commits, zero leaks) before being wired in; a
-`demo-smoke` CI job that runs `docs/DEMO.md`'s commands verbatim and
-asserts the specific outcomes the doc claims (which also surfaced and
-fixed a real doc bug: the "Failure evidence" section depended on manually
-restoring a blob mutated two sections earlier, with the restore
-instruction written *after* the code block that needed it -- now a
-self-contained fresh bundle instead); `scripts/release.sh`, producing a
+clean locally (11 commits, zero leaks) before being wired in;
+`scripts/release.sh`, producing a
 real checksummed tarball (`sha256sum -c` verified `OK` locally) without
 creating any git tag or GitHub Release, which stays a deliberate human
 action; and `docs/LIMITATIONS.md`, a short reader-facing statement of
@@ -486,64 +478,15 @@ secret scanning uses the `gitleaks` CLI binary directly rather than the
 wrapper carries a separate commercial EULA (see its `action.yml`), which
 is not a licensing commitment to take on silently given this project's
 existing license-cleanliness stance (ADR-001); the underlying scanning
-engine used instead is genuinely MIT-licensed. All five CI jobs (`host`,
-`fuzz-smoke`, `lint`, `secret-scan`, `demo-smoke`) have now passed for
+engine used instead is genuinely MIT-licensed. The four CI jobs (`host`,
+`fuzz-smoke`, `lint`, and `secret-scan`) have now passed for
 real in GitHub Actions (run `41836288042`) -- the `fuzz-smoke` job's first
 real run, in the previous pass, found an actual heap-use-after-free bug
-within seconds; this pass's three new jobs (`lint`, `secret-scan`,
-`demo-smoke`) found nothing further, confirming the local verification
-held up under the real environment too, not just assumed to. Suite:
+within seconds; the `lint` and `secret-scan` jobs found nothing further,
+confirming the local verification held up under the real environment too,
+not just assumed to. Suite:
 122/122, zero warnings under `-Werror`.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 
 ---
-
-## Level 7 — Hackathon Jury Experience
-
-**Problem.** A judge must grasp the problem, reproduce the core workflow,
-and inspect real evidence in minutes.
-
-**Deliverables.**
-
-- Reproducible under-three-minute demonstration (host path always available;
-  QNX path only with real SDP evidence).
-- Good bundle vs. modified bundle pair with a one-byte mutation script.
-- README finalized with screenshots or terminal captures derived from
-  actual runs only; Devpost submission text matching demonstrated behavior.
-- Optional QNX codelab/tutorial, only if completed and competition-compliant.
-
-**Artifacts.** `docs/DEMO.md` with truthful step-by-step commands; Devpost
-text; final README.
-
-**Threats addressed.** Demo-time overclaiming; synthetic material presented
-as real (synthetic content, if any, stays under `examples/synthetic/` with
-a SYNTHETIC banner).
-
-**Dependencies.** Levels 1 and 6; Level 2 for any QNX demo claim.
-
-**Tests.** A reviewer unfamiliar with the project follows `docs/DEMO.md`
-unaided and reaches the mutation failure; timing observed, not asserted.
-
-**Entry criteria.** Level 6 exit, or Level 1 exit plus explicit scoping of
-the demo to host-only evidence.
-
-**Exit criteria.** The judge path above succeeds end to end, and every QNX
-statement in the submission traces to `VERIFIED_REAL_QNX` evidence or is
-labeled otherwise.
-
-**Observable demo.** The six-act story: claim → evidence → independent
-verification → mutation → precise finding → stated boundary.
-
-**Status: PARTIAL (`VERIFIED_HOST_ONLY` for the documented host path).**
-`docs/DEMO.md` is executable end-to-end and `scripts/demo-smoke.sh` asserts its
-claimed observations; `docs/DEVPOST-DRAFT.md` now scopes the public write-up,
-the under-three-minute video, and the QNX evidence boundary to what exists.
-The remaining deliverables are external evidence, not prose substitutes: a
-public video URL recorded from the documented path, submission-form fields,
-and submission-specific QNX evidence that satisfies the event rules. Do not
-promote this level to `DONE` until those
-artifacts exist and the video is checked against the final submission.
-
-**Non-goals.** Polished frontend, cloud infrastructure, blockchain, AI/ML
-scoring, or any certification claim.

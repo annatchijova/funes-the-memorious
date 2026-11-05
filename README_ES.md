@@ -8,12 +8,11 @@
 
 **Funes the Memorious es una herramienta de procedencia para desarrollo QNX 8.0, alojada en Linux y escrita en C, que registra que se construyo y se probo realmente y permite que un revisor independiente verifique ese registro sin conexion.**
 
-Competencia: QNX Global Hackathon 2026 — Developer Tooling & Host Tools.
 Repositorio: `annatchijova/funes-the-memorious`. Licencia: MIT (ver [LICENSE](LICENSE)).
 
 El nombre viene del personaje de Borges que no olvida nada. Esta herramienta intenta lo contrario del recuerdo vago: recuerda exactamente que se recolecto, muestra de donde vino cada registro y dice con claridad donde termina la certeza. No es una memoria del exito. Es evidencia que puede ser desafiada.
 
-> Esta es una adaptacion al español del [README principal en ingles](README.md). La version normativa para la competencia es la inglesa; ante cualquier diferencia, prevalece aquella.
+> Esta es una adaptacion al español del [README principal en ingles](README.md). Ante cualquier diferencia, prevalece aquella.
 
 ---
 
@@ -34,7 +33,7 @@ Entre ambos hay un formato publico de paquete que otro ingeniero puede verificar
 
 ## Estado actual
 
-Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`make`, `make test` con 122 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 4 esta completo en su parte host-only y el Nivel 7 tiene un paquete de submission host-only en preparacion. El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
+Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`make`, `make test` con 122 verificaciones; ver [docs/STATUS.md](docs/STATUS.md)). El Nivel 4 esta completo en su parte host-only. El Nivel 2 (QNX) sigue `BLOCKED` porque no hay SDP instalado y no se afirma ningun resultado QNX. El estado vivo se mantiene en [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Nivel | Nombre | Estado |
 |---|---|---|
@@ -45,7 +44,6 @@ Los Niveles 0, 1, 3, 5 y 6 estan implementados y probados en el host Linux (`mak
 | 4 | Evidencia de pruebas y runtime QNX | PARTIAL (host slice DONE, `VERIFIED_HOST_ONLY`; QEMU/QNX runtime `NOT_RUN`) |
 | 5 | Comparacion forense y experiencia de auditoria | DONE (VERIFIED_HOST_ONLY) |
 | 6 | Seguridad, rendimiento, portabilidad y release | DONE (`VERIFIED_HOST_ONLY`) |
-| 7 | Experiencia para el jurado | PARTIAL ([borrador de submission](docs/DEVPOST-DRAFT.md) y demo host-only; evidencia QNX/URL de video pendientes) |
 
 ## Limites honestos
 

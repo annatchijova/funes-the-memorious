@@ -7,11 +7,8 @@ output replaces the expected output here and in `docs/STATUS.md`.
 
 ## Facts and references
 
-- Product target: QNX SDP 8.0 / QNX Everywhere, Developer Tooling & Host
-  Tools category of the QNX Global Hackathon 2026.
-- Official pages: [hackathon](https://qnx.devpost.com/),
-  [rules](https://qnx.devpost.com/rules),
-  [QNX Everywhere get-started](https://qnx.software/en/developers/get-started/qnx-everywhere),
+- Product target: QNX SDP 8.0 / QNX Everywhere.
+- Official pages: [QNX Everywhere get-started](https://qnx.software/en/developers/get-started/qnx-everywhere),
   [SDP 8.0 docs](https://www.qnx.com/developers/docs/8.0/index.html),
   [quickstart](https://www.qnx.com/developers/docs/8.0/com.qnx.doc.qnxsdp.quickstart/topic/about.html),
   [Linux host install](https://www.qnx.com/developers/docs/8.0/com.qnx.doc.qnxsdp.quickstart/topic/install_host.html),

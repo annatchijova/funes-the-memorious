@@ -8,7 +8,6 @@ English · [Español](README_ES.md) · [Showcase](showcase/index.html) · [Techn
 
 **Funes the Memorious is a Linux-hosted provenance tool for QNX 8.0 development, written in C, that records what was actually built and tested and lets an independent reviewer verify that record offline.**
 
-Competition: QNX Global Hackathon 2026 — Developer Tooling & Host Tools.
 Repository: `annatchijova/funes-the-memorious`. License: MIT (see [LICENSE](LICENSE)).
 
 The name comes from Borges' character who forgets nothing. This tool tries to do the opposite of vague recollection: it remembers exactly what was collected, shows where each record came from, and states plainly where certainty stops. It is not a memory of success. It is evidence that can be challenged.
@@ -58,12 +57,12 @@ separate seal command.) A successful run ends with a bundle directory.
 Changing one byte in a recorded artifact and re-running `funes-verify` ends
 with exit 3 and a diagnostic naming the exact artifact and digest that
 diverged. That mutation exercise — not a green checkmark — is the core
-demonstration. Step-by-step: [docs/DEMO.md](docs/DEMO.md).
+property to inspect.
 
-**Current status:** Levels 0, 1 and 3 are implemented and tested on the Linux
-host (`VERIFIED_HOST_ONLY`, 74-check suite; see [docs/STATUS.md](docs/STATUS.md)).
-QNX integration (Level 2) is `BLOCKED`: no QNX SDP is installed on the
-development host, and no QNX result is claimed.
+**Current status:** Levels 0, 1, 3, 5, and 6 are implemented and tested on
+the Linux host (`VERIFIED_HOST_ONLY`, 122-check suite; see
+[docs/STATUS.md](docs/STATUS.md)). QNX integration (Level 2) is `BLOCKED`:
+no QNX SDP is installed on the development host, and no QNX result is claimed.
 
 ### How this differs from the typical approach
 
@@ -148,7 +147,6 @@ Full entry/exit criteria, deliverables, threats, and tests per level: [docs/ROAD
 | 4 | Test evidence and QNX runtime | PARTIAL (host slice DONE, `VERIFIED_HOST_ONLY`; QEMU/QNX runtime `NOT_RUN`) |
 | 5 | Forensic Comparison and Audit UX | DONE (`VERIFIED_HOST_ONLY`) |
 | 6 | Security, performance, portability and release | DONE (`VERIFIED_HOST_ONLY`) |
-| 7 | Hackathon jury experience | PARTIAL ([submission draft](docs/DEVPOST-DRAFT.md) and host demo path; QNX evidence/video URL pending) |
 
 A level is `DONE` only when its exit criteria are met and linked to observed commands or artifacts. A README subsection existing is not evidence.
 
@@ -198,9 +196,7 @@ make test
 ./bin/funes doctor
 ```
 
-For the full build → test → verify → mutate walkthrough, follow
-[docs/DEMO.md](docs/DEMO.md). Observed outcomes are recorded in
-[docs/STATUS.md](docs/STATUS.md).
+Observed outcomes are recorded in [docs/STATUS.md](docs/STATUS.md).
 
 ### Host-only vs. QNX evidence
 
@@ -228,8 +224,6 @@ Planned integration (Levels 2 and 4):
 
 The host in which this repository was founded has no QNX SDP installed (`qcc` absent, `QNX_HOST`/`QNX_TARGET` unset). Level 2 is therefore `BLOCKED`, not simulated. Official references:
 
-- [QNX Global Hackathon 2026](https://qnx.devpost.com/)
-- [Hackathon rules](https://qnx.devpost.com/rules)
 - [QNX Everywhere — get started](https://qnx.software/en/developers/get-started/qnx-everywhere)
 - [QNX SDP 8.0 documentation](https://www.qnx.com/developers/docs/8.0/index.html)
 - [QNX SDP quickstart](https://www.qnx.com/developers/docs/8.0/com.qnx.doc.qnxsdp.quickstart/topic/about.html)
@@ -237,17 +231,6 @@ The host in which this repository was founded has no QNX SDP installed (`qcc` ab
 - [qcc reference](https://qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/q/qcc.html)
 
 If the SDP does not support the owner's Linux Mint host directly, the documented path is an isolated supported Ubuntu VM for SDK work. Funes documentation will state the supported-host facts from QNX release notes rather than pretend Mint is supported.
-
-### Demo shape (planned, Level 7)
-
-1. **The claim** — an engineer presents a QNX-targeted executable and says it passed.
-2. **The evidence** — Funes shows source state, SDK target, flags, command outcomes, and test observations linked to the artifact digest.
-3. **Independent verification** — `funes-verify` checks the bundle offline.
-4. **The mutation** — one byte of the binary changes.
-5. **The finding** — verification fails, naming the exact evidence that diverged.
-6. **The boundary** — the report states that valid evidence does not certify software safety or host honesty.
-
-Step-by-step commands will live in `docs/DEMO.md`, with the host-only demonstrator on a separate, clearly labeled path whenever the SDP is absent.
 
 ## Verification semantics (summary)
 
@@ -271,7 +254,7 @@ funes-the-memorious/
 │   ├── architecture/          # ADRs and the Technical README (ARCHITECTURE.md)
 │   ├── spec/                  # evidence bundle and verifier semantics specs
 │   ├── security/              # threat model
-│   └── engineering/           # skills applied, status, demo and setup guides
+│   └── engineering/           # skills applied and setup guides
 ├── src/                       # collector (funes) and its SHA-256
 ├── verifier/                  # independent verifier (funes-verify), own SHA-256/parser
 ├── tests/                     # host unit/integration/adversarial suite
@@ -310,10 +293,6 @@ Scoped to what is true today:
 | QNX QEMU runtime | Real target execution output | NOT_RUN |
 
 What successful verification will **not** mean, at any level: that the software is safe, that the original host was honest, that tests were adequate, or that a build is reproducible. Those boundaries are part of the design, stated here by narrowing the claims above — the exhaustive account lives in the threat model.
-
-## Competition relevance
-
-Funes targets the **Developer Tooling & Host Tools** category: it improves how QNX 8.0 developers produce reviewable evidence for the builds and tests they already run. Its QNX specificity is the toolchain integration — SDP discovery, `qcc` target provenance, and QNX artifact evidence — not a generic CI wrapper with a QNX label. The jury path is the mutation demonstration: a claim, its evidence, an offline check, a one-byte change, and a precise failure.
 
 ## License
 

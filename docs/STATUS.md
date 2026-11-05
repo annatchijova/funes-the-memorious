@@ -45,7 +45,7 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | QNX `qcc` detected | Actual tool/environment | Doctor reports `NOT_FOUND` on this host | BLOCKED |
 | QNX 8 target compiled | Actual compiler and binary | Not attempted without SDP | BLOCKED (`NOT_RUN`) |
 | QNX QEMU runtime | Actual execution evidence | Not attempted | NOT_RUN |
-| README quick start | Executed as written | `make`, `make test`, demo commands in `docs/DEMO.md` run on this host; CI runs it verbatim every push via `scripts/demo-smoke.sh` (`demo-smoke` job), which also caught and fixed a real doc ordering bug (see Level 6) | DONE (`VERIFIED_HOST_ONLY`) |
+| README quick start | Executed as written | `make`, `make test`, and `./bin/funes doctor` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
 | Security tests | Passed/failed counts | Hostile cases above are part of the 122-check suite | DONE (`VERIFIED_HOST_ONLY`) |
 | Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
 | Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 (+RT-02 follow-up) in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
@@ -86,8 +86,8 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
   SHA256SUMS, `sha256sum -c` verified `OK` locally; no git tag or GitHub
   Release has been created (deliberately left to the author).
 - Not run: QEMU (Level 4 target/QNX part). Level 6 is otherwise complete;
-  all five CI jobs (`host`, `fuzz-smoke`, `lint`, `secret-scan`,
-  `demo-smoke`) passed for real in GitHub Actions, run `41836288042`. See
+  all four CI jobs (`host`, `fuzz-smoke`, `lint`, `secret-scan`) passed for
+  real in GitHub Actions, run `41836288042`. See
   `docs/ROADMAP.md`'s Level 6 closure note for the one remaining honest
   caveat (gitleaks CLI vs. the commercially-licensed Action wrapper).
 - Failures still open: none in the host suite. One defect was found and
