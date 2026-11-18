@@ -758,9 +758,9 @@ int main(int argc, char **argv) {
      * need -- a hard failure, not a degraded status (fail-closed, same
      * philosophy as every other completeness check in this verifier). */
     if (has_key("expected_test_count")) {
-        unsigned long long nexp = req_u64("expected_test_count");
-        if (nexp > 1024) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "expected_test_count too large");
-        for (unsigned long long i = 0; i < nexp; i++) {
+        unsigned long long nexp_declared = req_u64("expected_test_count");
+        if (nexp_declared > 1024) FAIL("RESOURCE_LIMIT_EXCEEDED", 6, "expected_test_count too large");
+        for (unsigned long long i = 0; i < nexp_declared; i++) {
             char k[128];
             snprintf(k, sizeof(k), "expected_test.%llu.name.hex", i);
             require_key(k);

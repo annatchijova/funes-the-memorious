@@ -751,7 +751,7 @@ static int cmd_doctor(int json) {
     if (path) {
         char *copy = xstrdup(path);
         char *save = NULL;
-        for (char *tok = strtok_r(copy, ":", &save); tok; tok = strtok_r(NULL, ":", &save)) {
+        for (const char *tok = strtok_r(copy, ":", &save); tok; tok = strtok_r(NULL, ":", &save)) {
             char cand[PATH_MAX];
             snprintf(cand, sizeof(cand), "%s/qcc", tok);
             if (access(cand, X_OK) == 0) { qcc_found = 1; snprintf(qcc_path, sizeof(qcc_path), "%s", cand); break; }
@@ -872,7 +872,7 @@ static int cmd_capture(int argc, char **argv) {
         if (path) {
             char *copy = xstrdup(path);
             char *save = NULL;
-            for (char *tok = strtok_r(copy, ":", &save); tok; tok = strtok_r(NULL, ":", &save)) {
+            for (const char *tok = strtok_r(copy, ":", &save); tok; tok = strtok_r(NULL, ":", &save)) {
                 char cand[PATH_MAX];
                 snprintf(cand, sizeof(cand), "%s/qcc", tok);
                 if (access(cand, X_OK) == 0) { qnx_host_present = 1; break; }
