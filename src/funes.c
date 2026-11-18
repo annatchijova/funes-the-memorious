@@ -640,12 +640,23 @@ static int cmd_keygen(int argc, char **argv) {
 
 static int cmd_sign(int argc, char **argv) {
     const char *bundle = NULL, *key = NULL;
+    int force = 0;
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--bundle") == 0 && i + 1 < argc) bundle = argv[++i];
         else if (strcmp(argv[i], "--key") == 0 && i + 1 < argc) key = argv[++i];
+        else if (strcmp(argv[i], "--force") == 0) force = 1;
         else die("sign: unknown or incomplete option %s", argv[i]);
     }
     if (!bundle || !key) die("sign: --bundle DIR --key SEEDFILE are required");
+    /* RT4-01: refuse to silently overwrite pre-existing signature material.
+     * Re-signing must be an explicit act (--force). */
+    char sdir_pre[PATH_MAX];
+    snprintf(sdir_pre, sizeof(sdir_pre), "%s/signatures", bundle);
+    char sig_pre[PATH_MAX + 64], txt_pre[PATH_MAX + 64];
+    snprintf(sig_pre, sizeof(sig_pre), "%s/ed25519.sig", sdir_pre);
+    snprintf(txt_pre, sizeof(txt_pre), "%s/signer.txt", sdir_pre);
+    if ((access(sig_pre, F_OK) == 0 || access(txt_pre, F_OK) == 0) && !force)
+        die("sign: bundle %s already carries signature material; use --force to re-sign", bundle);
     uint8_t seed[32], pk[32];
     read_seed_file(key, seed, pk);
     char mpath[PATH_MAX];
@@ -718,7 +729,7 @@ static void usage(FILE *out) {
         "                [--name NAME] [--format json]\n"
         "  funes expect-tests --bundle DIR -- NAME [NAME...]\n"
         "  funes keygen --out SEEDFILE --pub-out PUBFILE\n"
-        "  funes sign --bundle DIR --key SEEDFILE\n"
+        "  funes sign --bundle DIR --key SEEDFILE [--force]\n"
         "  funes compare [--json] BUNDLE_A BUNDLE_B\n"
         "  funes --help\n"
         "capture/add-test exit status mirrors the executed command; the bundle\n"
@@ -850,8 +861,27 @@ static int cmd_capture(int argc, char **argv) {
     ll_printf(&l, "env.host_os.hex=%s", oh);
     ll_printf(&l, "env.host_arch.hex=%s", ah);
     free(oh); free(ah);
-    ll_printf(&l, "qnx.host_present=%d", getenv("QNX_HOST") ? 1 : 0);
-    ll_printf(&l, "qnx.target_present=%d", getenv("QNX_TARGET") ? 1 : 0);
+    /* RT4-02: qnx presence flags must not be fabricable from a bare
+     * getenv("QNX_HOST")/getenv("QNX_TARGET"). host_present reflects an
+     * actual qcc discovery on PATH (same check as funes doctor);
+     * target_present stays 0 until Level 2 records a genuine QNX target
+     * artifact in the bundle. */
+    int qnx_host_present = 0;
+    {
+        const char *path = getenv("PATH");
+        if (path) {
+            char *copy = xstrdup(path);
+            char *save = NULL;
+            for (char *tok = strtok_r(copy, ":", &save); tok; tok = strtok_r(NULL, ":", &save)) {
+                char cand[PATH_MAX];
+                snprintf(cand, sizeof(cand), "%s/qcc", tok);
+                if (access(cand, X_OK) == 0) { qnx_host_present = 1; break; }
+            }
+            free(copy);
+        }
+    }
+    ll_printf(&l, "qnx.host_present=%d", qnx_host_present);
+    ll_printf(&l, "qnx.target_present=%d", 0);
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof(cwd))) die("cannot read working directory");
     char *ch = hex_encode(cwd);

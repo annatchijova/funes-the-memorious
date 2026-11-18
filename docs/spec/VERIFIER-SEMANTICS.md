@@ -22,7 +22,7 @@ Human output and `--json` output carry the same fields:
 | `signer_trust_status` | `NOT_APPLICABLE` (no signature), `UNTRUSTED_SIGNER`, `TRUSTED_SIGNER` (matches the reviewer-supplied `--trusted-key`), `NOT_CHECKED` (same unreached-phase case as `signature_status` above) |
 | `test_observation_status` | `OBSERVED` if at least one `OBSERVED` test record exists and integrity is valid; `IMPORTED_ONLY` if tests exist but all are `IMPORTED`; `NO_TEST_RECORD` otherwise |
 | `artifact_status` | `ALL_PRESENT`, `MISSING`, `DIGEST_MISMATCH`, `NOT_CHECKED` |
-| `qnx_toolchain_status` | `RECORDED_PRESENT_FLAGS` / `RECORDED_ABSENT_FLAGS` (what the manifest records about `QNX_HOST`/`QNX_TARGET` presence; not a QNX verification) |
+| `qnx_toolchain_status` | `RECORDED_PRESENT_FLAGS` / `RECORDED_ABSENT_FLAGS` (what the manifest records about `qcc` discovery and the reserved QNX target flag; not a QNX verification) |
 | `limitations` | Fixed statements: integrity is not authenticity; authenticity would not prove execution; validity does not certify software safety |
 
 There is no universal `SAFE`, `TRUSTED`, or numeric confidence output, at any
