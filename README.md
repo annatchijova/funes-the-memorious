@@ -64,6 +64,11 @@ the Linux host (`VERIFIED_HOST_ONLY`, 142-check suite; see
 [docs/STATUS.md](docs/STATUS.md)). QNX integration (Level 2) is `BLOCKED`:
 no QNX SDP is installed on the development host, and no QNX result is claimed.
 
+The provisional real-first demonstration plan is in
+[docs/TEST-CASES.md](docs/TEST-CASES.md). It defines the cases, evidence chain,
+claim boundaries, and the point at which synthetic material is allowed only as
+an adversarial test—not as product evidence.
+
 ### How this differs from the typical approach
 
 | Property | Typical "passed" handoff | Funes evidence bundle |
