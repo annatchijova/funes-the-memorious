@@ -549,38 +549,37 @@ grep -q "signer_trust_status=NOT_CHECKED" "$TMP/vrt2_04.txt"; ok $? "RT2-04 foll
 $VERIFY "$TMP/bfail" >"$TMP/vrt2_04b.txt" 2>&1
 grep -q "signature_status=NOT_PRESENT" "$TMP/vrt2_04b.txt"; ok $? "RT2-04 follow-up: genuinely unsigned bundle still reports NOT_PRESENT"
 
-echo "== red team round 4: silent re-signing overwrites prior key (RT4-01) =="
-# Re-signing with a different key must not silently override prior signature material.
-$FUNES capture --out "$TMP/brt4_sig" -- /bin/echo rt4sig >"$TMP/caprt4sig.log" 2>&1
-$FUNES keygen --out "$TMP/rt4_seedA.txt" --pub-out "$TMP/rt4_pubA.txt" >"$TMP/rt4kgA.log" 2>&1
-$FUNES keygen --out "$TMP/rt4_seedB.txt" --pub-out "$TMP/rt4_pubB.txt" >"$TMP/rt4kgB.log" 2>&1
-$FUNES sign --bundle "$TMP/brt4_sig" --key "$TMP/rt4_seedA.txt" >"$TMP/rt4signA.log" 2>&1
-expect_exit 0 $? "RT4-01 sign with key A succeeds"
-$VERIFY --trusted-key "$TMP/rt4_pubA.txt" "$TMP/brt4_sig" >"$TMP/rt4vA.txt" 2>&1
-expect_exit 0 $? "RT4-01 verify with key A succeeds"
-grep -q "signer_trust_status=TRUSTED_SIGNER" "$TMP/rt4vA.txt"; ok $? "RT4-01 key A is TRUSTED_SIGNER before re-sign"
-$FUNES sign --bundle "$TMP/brt4_sig" --key "$TMP/rt4_seedB.txt" >"$TMP/rt4signB.log" 2>&1
-expect_exit 0 $? "RT4-01 sign with key B succeeds (silently overrides key A)"
-$VERIFY --trusted-key "$TMP/rt4_pubB.txt" "$TMP/brt4_sig" >"$TMP/rt4vB.txt" 2>&1
-expect_exit 0 $? "RT4-01 verify with key B succeeds after re-sign"
-grep -q "signer_trust_status=TRUSTED_SIGNER" "$TMP/rt4vB.txt"; ok $? "RT4-01 key B is TRUSTED_SIGNER after re-sign"
-$VERIFY --trusted-key "$TMP/rt4_pubA.txt" "$TMP/brt4_sig" >"$TMP/rt4vA2.txt" 2>&1
-expect_exit 9 $? "RT4-01 verify with key A rejected after re-sign (exit 9 SIGNER_UNTRUSTED)"
-grep -q "SIGNER_UNTRUSTED" "$TMP/rt4vA2.txt"; ok $? "RT4-01 key A named SIGNER_UNTRUSTED after re-sign"
+echo "== red team round 4 fix verification: sign refuses re-sign without --force (RT4-01 fix) =="
+$FUNES capture --out "$TMP/brt4fix_sig" -- /bin/echo rt4fixsig >"$TMP/caprt4fix.log" 2>&1
+$FUNES keygen --out "$TMP/rt4fix_seedA.txt" --pub-out "$TMP/rt4fix_pubA.txt" >"$TMP/rt4fixkgA.log" 2>&1
+$FUNES keygen --out "$TMP/rt4fix_seedB.txt" --pub-out "$TMP/rt4fix_pubB.txt" >"$TMP/rt4fixkgB.log" 2>&1
+$FUNES sign --bundle "$TMP/brt4fix_sig" --key "$TMP/rt4fix_seedA.txt" >"$TMP/rt4fixsignA.log" 2>&1
+expect_exit 0 $? "RT4-01 fix: sign with key A succeeds"
+$VERIFY --trusted-key "$TMP/rt4fix_pubA.txt" "$TMP/brt4fix_sig" >"$TMP/rt4fixvA.txt" 2>&1
+expect_exit 0 $? "RT4-01 fix: verify with key A succeeds"
+grep -q "signer_trust_status=TRUSTED_SIGNER" "$TMP/rt4fixvA.txt"; ok $? "RT4-01 fix: key A is TRUSTED_SIGNER before re-sign"
+$FUNES sign --bundle "$TMP/brt4fix_sig" --key "$TMP/rt4fix_seedB.txt" >"$TMP/rt4fixsignB_noforce.log" 2>&1
+if [ $? -ne 0 ]; then PASS=$((PASS + 1)); echo "PASS: RT4-01 fix: sign with key B refused without --force";
+else FAIL=$((FAIL + 1)); echo "FAIL: RT4-01 fix: sign with key B refused without --force"; fi
+$FUNES sign --bundle "$TMP/brt4fix_sig" --key "$TMP/rt4fix_seedB.txt" --force >"$TMP/rt4fixsignB_force.log" 2>&1
+expect_exit 0 $? "RT4-01 fix: sign with key B --force succeeds"
+$VERIFY --trusted-key "$TMP/rt4fix_pubB.txt" "$TMP/brt4fix_sig" >"$TMP/rt4fixvB.txt" 2>&1
+expect_exit 0 $? "RT4-01 fix: verify with key B succeeds after forced re-sign"
+grep -q "signer_trust_status=TRUSTED_SIGNER" "$TMP/rt4fixvB.txt"; ok $? "RT4-01 fix: key B is TRUSTED_SIGNER after forced re-sign"
+$VERIFY --trusted-key "$TMP/rt4fix_pubA.txt" "$TMP/brt4fix_sig" >"$TMP/rt4fixvA2.txt" 2>&1
+expect_exit 9 $? "RT4-01 fix: verify with key A rejected after re-sign (exit 9 SIGNER_UNTRUSTED)"
+grep -q "SIGNER_UNTRUSTED" "$TMP/rt4fixvA2.txt"; ok $? "RT4-01 fix: key A named SIGNER_UNTRUSTED after re-sign"
 
-echo "== red team round 4: QNX presence flags fabricable from env alone (RT4-02) =="
+echo "== red team round 4 fix verification: QNX flags not fabricable from env alone (RT4-02 fix) =="
 which qcc >/dev/null 2>&1 && QCC_FOUND=1 || QCC_FOUND=0
-[ "$QCC_FOUND" -eq 0 ]; ok $? "RT4-02 precondition: no qcc installed on this host"
-QNX_HOST=1 QNX_TARGET=1 $FUNES capture --out "$TMP/brt4_qnx" -- /bin/true >"$TMP/caprt4qnx.log" 2>&1
-expect_exit 0 $? "RT4-02 capture with QNX env vars succeeds"
-grep -q "^qnx.host_present=1$" "$TMP/brt4_qnx/manifest.txt"; ok $? "RT4-02 manifest has qnx.host_present=1"
-grep -q "^qnx.target_present=1$" "$TMP/brt4_qnx/manifest.txt"; ok $? "RT4-02 manifest has qnx.target_present=1"
-$VERIFY "$TMP/brt4_qnx" >"$TMP/rt4qv.txt" 2>&1
-expect_exit 0 $? "RT4-02 verify accepts bundle with fabricated QNX flags"
-grep -q "qnx_toolchain_status=RECORDED_PRESENT_FLAGS" "$TMP/rt4qv.txt"; ok $? "RT4-02 verifier reports RECORDED_PRESENT_FLAGS despite no QNX SDP"
-$FUNES doctor --json >"$TMP/rt4doctor.json" 2>&1
-grep -q '"qcc_found":false' "$TMP/rt4doctor.json"; ok $? "RT4-02 doctor honestly reports qcc_found=false"
-grep -q '"qnx_toolchain_status":"NOT_FOUND"' "$TMP/rt4doctor.json"; ok $? "RT4-02 doctor honestly reports qnx_toolchain_status=NOT_FOUND"
+[ "$QCC_FOUND" -eq 0 ]; ok $? "RT4-02 fix precondition: no qcc installed on this host"
+QNX_HOST=1 QNX_TARGET=1 $FUNES capture --out "$TMP/brt4fix_qnx" -- /bin/true >"$TMP/caprt4fixqnx.log" 2>&1
+expect_exit 0 $? "RT4-02 fix: capture with QNX env vars succeeds"
+grep -q "^qnx.host_present=0$" "$TMP/brt4fix_qnx/manifest.txt"; ok $? "RT4-02 fix: manifest has qnx.host_present=0 without qcc"
+grep -q "^qnx.target_present=0$" "$TMP/brt4fix_qnx/manifest.txt"; ok $? "RT4-02 fix: manifest has qnx.target_present=0"
+$VERIFY "$TMP/brt4fix_qnx" >"$TMP/rt4fixqv.txt" 2>&1
+expect_exit 0 $? "RT4-02 fix: verify accepts bundle with honest QNX flags"
+grep -q "qnx_toolchain_status=RECORDED_ABSENT_FLAGS" "$TMP/rt4fixqv.txt"; ok $? "RT4-02 fix: verifier reports RECORDED_ABSENT_FLAGS without QNX SDP"
 
 echo ""
 echo "RESULT: pass=$PASS fail=$FAIL (host-only suite)"
