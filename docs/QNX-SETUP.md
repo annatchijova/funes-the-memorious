@@ -21,6 +21,20 @@ output replaces the expected output here and in `docs/STATUS.md`.
 - Funes never installs the SDP, accepts its license, stores credentials, or
   redistributes SDK content, target binaries from the SDK, or samples.
 
+## Smoke runner (after the SDP is available)
+
+Use the repository smoke runner before attempting a target run:
+
+```bash
+make qnx-smoke QNX_TARGET_FLAGS='-V<validated-target>'
+```
+
+The runner fails closed as `BLOCKED` when `qcc`, `QNX_HOST`, or `QNX_TARGET`
+is unavailable. It never guesses a target flag. With the SDP available it
+captures a copy of `qnx8-hello` through `funes`, verifies the resulting bundle,
+and still does not claim target execution; that requires a separate QNX/QEMU
+run with target-specific evidence.
+
 ## Procedure (to run with a licensed SDP)
 
 1. Install the SDP per the official Linux host instructions, under your own

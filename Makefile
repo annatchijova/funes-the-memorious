@@ -4,7 +4,7 @@ CPPFLAGS ?=
 
 BIN = bin/funes bin/funes-verify
 
-.PHONY: all clean test qnx-contract
+.PHONY: all clean test qnx-contract qnx-smoke
 
 all: $(BIN)
 
@@ -26,6 +26,11 @@ test: all
 # VERIFIED_REAL_QNX evidence; the real SDP remains required for Level 2.
 qnx-contract: all
 	sh tests/qnx_contract.sh
+
+# Real-SDP smoke runner. It exits BLOCKED when the licensed SDK is unavailable
+# and requires explicit target flags when it is present.
+qnx-smoke: all
+	sh scripts/qnx_smoke.sh
 
 clean:
 	rm -rf bin
