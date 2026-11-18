@@ -323,7 +323,7 @@ one deliberately failing test whose evidence is preserved and verified.
 
 **Status: PARTIAL.** Host-only slice is `DONE (VERIFIED_HOST_ONLY)`;
 target/QEMU parts remain `NOT_RUN`, blocked by Level 2 (no QNX SDP). Evidence
-for the host slice: `make test` reports `pass=97 fail=0` (see
+for the host slice: `make test` reports `pass=142 fail=0` (see
 `docs/STATUS.md`), covering: every test record now carries a required
 `test.<n>.runtime` token (`host`, always, in this round — there is no real
 QNX execution path yet, and a flag letting a caller claim `target` without
@@ -485,7 +485,7 @@ real run, in the previous pass, found an actual heap-use-after-free bug
 within seconds; the `lint` and `secret-scan` jobs found nothing further,
 confirming the local verification held up under the real environment too,
 not just assumed to. Suite:
-127/127, zero warnings under `-Werror`.
+142/142, zero warnings under `-Werror`.
 
 **Non-goals.** Certifications; hosted release infrastructure.
 

@@ -4,7 +4,7 @@ CPPFLAGS ?=
 
 BIN = bin/funes bin/funes-verify
 
-.PHONY: all clean test
+.PHONY: all clean test qnx-contract
 
 all: $(BIN)
 
@@ -21,6 +21,11 @@ bin/funes-verify: verifier/funes_verify.c verifier/sha256.c verifier/sha256.h
 
 test: all
 	sh tests/run_tests.sh
+
+# Contract-only QNX harness. It uses an explicit fake qcc and never produces
+# VERIFIED_REAL_QNX evidence; the real SDP remains required for Level 2.
+qnx-contract: all
+	sh tests/qnx_contract.sh
 
 clean:
 	rm -rf bin

@@ -15,11 +15,12 @@ copied from a plan. Language: English.
 ```bash
 make clean && make        # builds bin/funes and bin/funes-verify with -Werror
 make test                 # sh tests/run_tests.sh
+make qnx-contract         # contract-only fake-qcc harness; never real QNX evidence
 ./bin/funes doctor
 ./bin/funes doctor --json
 ```
 
-Observed test outcome: **127 PASS, 0 FAIL** (`RESULT: pass=127 fail=0`, suite
+Observed test outcome: **142 PASS, 0 FAIL** (`RESULT: pass=142 fail=0`, suite
 exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Validation matrix
@@ -43,10 +44,11 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 | Truncation | Flagged, not hidden | 2 MB output -> `stdout_truncated=1`, bundle verifies | DONE (`VERIFIED_HOST_ONLY`) |
 | Determinism | Stable digests | Fixed-epoch captures give identical source/stdout digests (suite) | DONE (`VERIFIED_HOST_ONLY`) |
 | QNX `qcc` detected | Actual tool/environment | Doctor reports `NOT_FOUND` on this host | BLOCKED |
+| QNX command contract | Argument formation and target-claim boundary | `make qnx-contract` uses a temporary fixture copy and explicit fake `qcc` | DONE (`CONTRACT_TEST_ONLY`) |
 | QNX 8 target compiled | Actual compiler and binary | Not attempted without SDP | BLOCKED (`NOT_RUN`) |
 | QNX QEMU runtime | Actual execution evidence | Not attempted | NOT_RUN |
 | README quick start | Executed as written | `make`, `make test`, and `./bin/funes doctor` run on this host | DONE (`VERIFIED_HOST_ONLY`) |
-| Security tests | Passed/failed counts | Hostile cases above are part of the 127-check suite | DONE (`VERIFIED_HOST_ONLY`) |
+| Security tests | Passed/failed counts | Hostile cases above are part of the 142-check suite | DONE (`VERIFIED_HOST_ONLY`) |
 | Bundle comparison | Material diff with verification first | `funes compare`: identical exit 0, changed source/artifact named, tampered input exit 2 | DONE (`VERIFIED_HOST_ONLY`) |
 | Red Team Round 1 | Findings fixed and re-induced | RT-01..RT-06 (+RT-02 follow-up) in suite; report in `docs/security/RED-TEAM-ROUND-1.md` | DONE (`VERIFIED_HOST_ONLY`) |
 | Host-vs-target test records | Every test record carries runtime=host\|target, enforced | Required key, invalid/missing token -> exit 2 `BUNDLE_INVALID`; collector always writes `host` (no real QNX execution path yet) | DONE (`VERIFIED_HOST_ONLY`) |
@@ -63,7 +65,7 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 ## Test accounting
 
-- Actually run: 127 host checks (unit-via-CLI, integration, adversarial;
+- Actually run: 142 host checks (unit-via-CLI, integration, adversarial;
   Level 3 signing/trust, Level 5 comparison, Red Team Round 1 regressions
   RT-01..RT-06 plus the RT-02 follow-up, Red Team Round 2 regressions
   (RT2-04), Level 4 host-only test-evidence checks, the timeout regression
@@ -98,3 +100,8 @@ exit 0). The SHA-256 path is checked against the published `abc` vector.
 
 - Level 2 needs a licensed QNX SDP 8.0 on a supported host (see
   `docs/QNX-SETUP.md`). Until then it remains `BLOCKED`, by design.
+
+- A contract-only QNX harness is available with `make qnx-contract`. It uses
+  an explicit fake `qcc` against a temporary copy of the fixture to verify
+  argument formation and honest absent-target labeling. It never produces
+  `VERIFIED_REAL_QNX` evidence.
