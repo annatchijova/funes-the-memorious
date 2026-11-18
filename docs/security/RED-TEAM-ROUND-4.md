@@ -65,13 +65,13 @@ CODE FACT · PLAUSIBLE HYPOTHESIS · CONFIRMED BY INDUCTION · FALSIFIED
 | Artifact symlink escape at capture input | FALSIFIED | `stat()` follows symlinks at input; the blob stored is the resolved target's content, not a symlink; verifier checks the in-bundle blob is a regular file |
 | `store_blob_file` TOCTOU (access→fopen) | Not exploitable in single-process threat model | Requires concurrent writer to the bundle dir between check and write; out of scope |
 
-## Recommendations (recorded, not implemented in this round)
+## Recommendations and disposition
 
-1. **RT4-01:** Make `sign` refuse to overwrite existing signature material unless an explicit `--force` is passed; document re-signing as an explicit act that invalidates prior custody. Consider having `verify` report when signature material was replaced after sealing.
-2. **RT4-02:** Until Level 2 (QNX SDP 8.0) is unblocked, keep `qnx.target_present=0` in all captured bundles and derive `qnx.host_present` from actual SDP discovery (`qcc` found + version), not from a bare `getenv`. Do not let `QNX_HOST`/`QNX_TARGET` env vars alone fabricate QNX presence in sealed evidence.
-3. Add regression tests for both findings to `tests/run_tests.sh` (appended below).
+1. **RT4-01 — implemented:** `sign` refuses to overwrite existing signature material unless an explicit `--force` is passed; forced re-signing is an explicit act that invalidates prior custody.
+2. **RT4-02 — implemented:** until Level 2 (QNX SDP 8.0) is unblocked, `qnx.target_present` remains `0` and `qnx.host_present` is derived from executable `qcc` discovery on `PATH`; `QNX_HOST`/`QNX_TARGET` alone cannot set either flag.
+3. Regression tests for both fixes are present in `tests/run_tests.sh`.
 
 ## Regression checks added to `tests/run_tests.sh`
 
-- RT4-01: sign with key A → verify A TRUSTED; sign with key B → verify B TRUSTED, verify A SIGNER_UNTRUSTED (exit 9).
-- RT4-02: capture with `QNX_HOST=1 QNX_TARGET=1` → manifest flags at 1 → verify exit 0 with `RECORDED_PRESENT_FLAGS` → doctor reports `qcc_found=false`.
+- RT4-01: sign with key A → an unforced sign with key B is refused → `--force` makes the re-sign explicit and key A is rejected afterward.
+- RT4-02: capture with `QNX_HOST=1 QNX_TARGET=1` and no `qcc` → both manifest flags remain `0` → verifier reports `RECORDED_ABSENT_FLAGS`.

@@ -729,7 +729,7 @@ static void usage(FILE *out) {
         "                [--name NAME] [--format json]\n"
         "  funes expect-tests --bundle DIR -- NAME [NAME...]\n"
         "  funes keygen --out SEEDFILE --pub-out PUBFILE\n"
-        "  funes sign --bundle DIR --key SEEDFILE\n"
+        "  funes sign --bundle DIR --key SEEDFILE [--force]\n"
         "  funes compare [--json] BUNDLE_A BUNDLE_B\n"
         "  funes --help\n"
         "capture/add-test exit status mirrors the executed command; the bundle\n"

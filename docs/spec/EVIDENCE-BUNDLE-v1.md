@@ -63,11 +63,12 @@ SHA-256 digest; the manifest never trusts a stored filename beyond that.
 | `source.digest` | SHA-256 over the concatenation, in sorted order, of `<sha256><space><space><path.hex>\n` lines; `NONE` when the set is empty. |
 | `artifact_count`, `artifact.<n>.name.hex`, `artifact.<n>.role`, `artifact.<n>.sha256`, `artifact.<n>.size` | Output artifacts hashed after the build. `role` is a non-empty ASCII token containing only letters, digits, `.`, `_`, and `-`, such as `target-executable`, `test-report`, or `compiler-log`. Each artifact's bytes are stored as a blob. |
 | `env.host_os`, `env.host_arch` | `uname` system and machine strings (hex-encoded as `*.hex` values under keys `env.host_os.hex`, `env.host_arch.hex`). |
-| `qnx.host_present`, `qnx.target_present` | `1` if `QNX_HOST`/`QNX_TARGET` were set (values are never stored), else `0`. |
+| `qnx.host_present`, `qnx.target_present` | `qnx.host_present` is `1` only when an executable `qcc` is found on `PATH`; `qnx.target_present` remains `0` until Level 2 records a genuine QNX target artifact. `QNX_HOST`/`QNX_TARGET` values alone do not set either flag. |
 
-Allowlisted environment only: no environment value other than the two
-presence booleans above is recorded. Secrets cannot enter the bundle through
-the environment because no other variable is read for the manifest.
+Allowlisted environment only: the collector reads `PATH` to discover `qcc`, but
+does not record any environment value. `QNX_HOST` and `QNX_TARGET` alone do not
+enter the manifest. Secrets cannot enter the bundle through the environment
+because no other variable is read for the manifest.
 
 ### Optional keys (test records)
 
