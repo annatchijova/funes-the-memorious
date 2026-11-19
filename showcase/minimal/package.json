@@ -1,0 +1,12 @@
+{
+  "name": "funes-minimal-evidence-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && cp src/index.html src/styles.css dist/",
+    "serve": "python3 -m http.server 4174 --directory dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

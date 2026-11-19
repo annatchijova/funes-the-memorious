@@ -216,6 +216,10 @@ venv/
 # Node tooling that may appear in docs site helpers (not the product language)
 node_modules/
 
+# The minimal evidence UI ships its compiled static page for direct review.
+!showcase/minimal/dist/
+!showcase/minimal/dist/**
+
 # ---------------------------------------------------------------------------
 # Archives and compressed files (except explicitly tracked fixtures)
 # ---------------------------------------------------------------------------

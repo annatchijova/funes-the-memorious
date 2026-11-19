@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Minimal real-first evidence view for Funes the Memorious.">
+    <title>FUNES · Evidence cases</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">FUNES / REAL-FIRST EVIDENCE</p>
+          <h1>What actually happened?</h1>
+          <p class="lede">Choose a case. See the command, the evidence, and the boundary of the claim.</p>
+        </div>
+        <p class="repo-note">OSS · host evidence · QNX explicit</p>
+      </header>
+
+      <section class="case-picker" aria-labelledby="picker-title">
+        <label id="picker-title" for="case-select">Evidence case</label>
+        <select id="case-select"></select>
+      </section>
+
+      <section class="case-panel" aria-labelledby="case-title" aria-live="polite">
+        <div class="case-heading">
+          <div>
+            <p class="eyebrow">Selected case</p>
+            <h2 id="case-title"></h2>
+          </div>
+          <span id="case-status" class="status"></span>
+        </div>
+        <p id="case-summary" class="summary"></p>
+
+        <div class="command-block">
+          <span class="command-label">Observed command</span>
+          <code id="case-command"></code>
+        </div>
+
+        <div class="evidence-grid">
+          <article>
+            <h3>Evidence carried</h3>
+            <ul id="case-evidence"></ul>
+          </article>
+          <article>
+            <h3>What it proves</h3>
+            <p id="case-proves"></p>
+          </article>
+          <article>
+            <h3>What it does not prove</h3>
+            <p id="case-does-not-prove"></p>
+          </article>
+        </div>
+      </section>
+
+      <footer>
+        <span>Snapshot only. Integrity is not software safety.</span>
+        <a href="../../docs/TEST-CASES.md">Read the full case plan</a>
+      </footer>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
