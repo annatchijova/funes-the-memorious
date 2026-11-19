@@ -66,6 +66,7 @@ for (const evidenceCase of cases) {
     option.textContent = `${evidenceCase.id} · ${evidenceCase.title}`;
     caseSelect.append(option);
 }
+caseSelect.value = cases[0].id;
 function renderCase(id) {
     const evidenceCase = cases.find((candidate) => candidate.id === id) ?? cases[0];
     caseTitle.textContent = evidenceCase.title;
